@@ -115,6 +115,10 @@ publish_pip_cache = false
 [repo_precache_exts]
 # Apps to run and precache
 apps = [
+    "${root}/source/apps/my_editor_1.kit",
+    "${root}/source/apps/my_editor_1_streaming.kit",
+    "${root}/source/apps/my_editor_clean.kit",
+    "${root}/source/apps/nycu.e3dqa_scene_viewer.kit",
 ]
 
 registries = [

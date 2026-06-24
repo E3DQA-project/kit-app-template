@@ -1,0 +1,95 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# Minimal clean app for scene browsing/evaluation.
+# Custom extensions intentionally limited to:
+#   - usdz_folder_browser
+#   - metric_sliders
+
+[package]
+title = "My Editor Clean"
+version = "0.1.0"
+description = "Clean Kit app with only USDZ browser and metric sliders."
+keywords = ["app", "clean", "usdz", "metrics"]
+
+[dependencies]
+# Core app + viewport
+"omni.kit.uiapp" = {}
+"omni.kit.mainwindow" = {}
+"omni.kit.viewport.window" = {}
+"omni.kit.viewport.utility" = {}
+"omni.kit.manipulator.camera" = {}
+"omni.kit.viewport.menubar.camera" = {}
+"omni.kit.viewport.menubar.display" = {}
+"omni.kit.viewport.menubar.render" = {}
+"omni.kit.viewport.menubar.settings" = {}
+"omni.kit.viewport.menubar.lighting" = {}
+
+# USD / stage support
+"omni.usd" = {}
+"omni.kit.commands" = {}
+"omni.kit.stage_template.core" = {}
+
+# Basic windows useful for inspection/debug
+"omni.kit.window.stage" = {}
+"omni.kit.window.property" = {}
+"omni.kit.window.toolbar" = {}
+"omni.kit.window.console" = {}
+"omni.kit.window.status_bar" = {}
+
+# Renderer
+"omni.hydra.rtx" = {}
+"omni.rtx.settings.core" = {}
+
+# Only custom tools requested
+"usdz_folder_browser" = {}
+"metric_sliders" = {}
+
+[settings]
+app.viewport.currentTool = "navigation"
+exts."omni.kit.viewport.navigation.core".activeOperation = "fly"
+exts."omni.kit.viewport.navigation.camera_manipulator".defaultOperation = "fly"
+guide.grid.visible = false
+
+renderer.asyncInit = true
+renderer.gpuEnumeration.glInterop.enabled = false
+crashreporter.compressDumpFiles = true
+
+[settings.app]
+name = "My Editor Clean"
+window.title = "My Editor Clean"
+content.emptyStageOnStart = true
+renderer.skipWhileMinimized = true
+font.file = "${fonts}/OpenSans-SemiBold.ttf"
+font.size = 16
+
+[settings.app.exts]
+folders.'++' = [
+    "${app}/../exts",
+    "${app}/../extscache/",
+]
+
+[settings.app.viewport.defaults]
+fillViewport = true
+
+[[test]]
+args = [
+    "--/app/file/ignoreUnsavedOnExit=true"
+]
+
+
+########################################################################################################################
+# BEGIN GENERATED PART (Remove from 'BEGIN' to 'END' to regenerate)
+########################################################################################################################
+
+# Kit SDK Version: 110.0.0+feature.276876.4a5123f4.gl
+
+# Version lock for all dependencies:
+[settings.app.exts]
+enabled = [
+	"omni.kit.viewport.menubar.lighting-107.3.2",
+]
+
+########################################################################################################################
+# END GENERATED PART
+########################################################################################################################

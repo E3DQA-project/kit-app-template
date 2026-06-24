@@ -1,0 +1,27 @@
+[package]
+title = "Scene Recorder"
+version = "0.1.0"
+description = "Record live camera navigation as a trajectory JSON and export video; replay any saved trajectory in a scene with video export."
+category = "Tools"
+changelog = "docs/CHANGELOG.md"
+keywords = ["kit", "extension", "camera", "record", "replay", "trajectory", "video"]
+readme = "docs/README.md"
+repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.usd" = {}
+"omni.kit.viewport.utility" = {}
+"omni.anim.curve.core" = {}
+"omni.kit.capture.viewport" = { optional = true }
+"omni.kit.window.movie_capture" = { optional = true }
+"omni.kit.renderer.capture" = { optional = true }
+
+[[python.module]]
+name = "scene_recorder"
+
+[documentation]
+pages = [
+    "docs/Overview.md",
+    "docs/CHANGELOG.md",
+]

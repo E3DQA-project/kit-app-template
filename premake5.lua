@@ -15,3 +15,7 @@ repo_build.prebuild_copy {
 }
 
 -- Apps: for each app generate batch files and a project based on kit files (e.g. my_name.my_app.kit)
+
+define_app("my_editor_1.kit")
+define_app("my_editor_clean.kit")
+define_app("nycu.e3dqa_scene_viewer.kit")

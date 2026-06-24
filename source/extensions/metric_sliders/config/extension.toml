@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+[package]
+title = "Metric Sliders"
+version = "0.1.0"
+description = "UI sliders (0-5) to rate the currently loaded asset, with per-file saving."
+category = "Tools"
+changelog = "docs/CHANGELOG.md"
+keywords = ["kit", "extension", "python", "ui", "metrics", "sliders"]
+readme  = "docs/README.md"
+repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.usd" = {}
+
+[settings]
+
+[[python.module]]
+name = "metric_sliders"
+
+[documentation]
+pages = [
+    "docs/Overview.md",
+    "docs/CHANGELOG.md",
+]
+

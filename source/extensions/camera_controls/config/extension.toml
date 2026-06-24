@@ -1,0 +1,22 @@
+[package]
+title = "Camera Controls"
+version = "0.1.0"
+description = "Preset camera navigation defaults and speed sliders for viewport controls."
+category = "Tools"
+changelog = "docs/CHANGELOG.md"
+keywords = ["kit", "extension", "camera", "navigation", "viewport", "controls"]
+readme = "docs/README.md"
+repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.kit.viewport.menubar.camera" = { optional = true }
+
+[[python.module]]
+name = "camera_controls"
+
+[documentation]
+pages = [
+    "docs/Overview.md",
+    "docs/CHANGELOG.md",
+]

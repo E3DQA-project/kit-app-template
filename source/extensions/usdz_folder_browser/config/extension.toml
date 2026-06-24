@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+#
+# NVIDIA CORPORATION, its affiliates and licensors retain all intellectual
+# property and proprietary rights in and to this material, related
+# documentation and any modifications thereto. Any use, reproduction,
+# disclosure or distribution of this material and related documentation
+# without an express license agreement from NVIDIA CORPORATION or
+# its affiliates is strictly prohibited.
+
+[package]
+title = "USDZ Folder Browser"
+version = "0.1.0"
+description = "Traverse a folder of USDZ files and load them into the viewport with next/prev controls."
+category = "Tools"
+changelog = "docs/CHANGELOG.md"
+keywords = ["kit", "extension", "usd", "usdz", "browser", "viewer"]
+readme  = "docs/README.md"
+repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.usd" = {}
+"omni.kit.commands" = {}
+"omni.kit.viewport.utility" = {}
+# omni.kit.window.filepicker is imported at runtime via try/except — not listed here
+# so the extension resolver never fails on its absence in minimal app configurations.
+
+[[python.module]]
+name = "usdz_folder_browser"
+
+[documentation]
+pages = [
+    "docs/Overview.md",
+    "docs/CHANGELOG.md",
+]
+
