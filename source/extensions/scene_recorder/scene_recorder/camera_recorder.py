@@ -13,6 +13,8 @@ import math
 import os
 from typing import Any, Callable, Dict, List, Optional
 
+from . import trajectory_utils as tutils
+
 
 class CameraRecorder:
     """Poll the active viewport camera pose and accumulate a trajectory.
@@ -54,7 +56,7 @@ class CameraRecorder:
         self._frame_idx: int = 0
         self._on_frame_cb: Optional[Callable[[int], None]] = None
         self._recording: bool = False
-        self._capture_iface = None  # omni.kit.renderer_capture interface, lazily acquired
+        self._viewport_capture_enabled: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -97,8 +99,8 @@ class CameraRecorder:
         self._recording = True
 
         if self.capture_video:
-            self._ensure_frames_dir()   # Set the frames directory (self.frames_dir) to the default directory of /home/pierce/scene_recorder_frames if it is not set, otherwise mkdir
-            self._acquire_capture_iface()
+            self._ensure_frames_dir()
+            self._prepare_viewport_capture()
 
         self._subscribe_update()
 
@@ -204,28 +206,23 @@ class CameraRecorder:
             self.frames_dir = d
         os.makedirs(d, exist_ok=True)
 
-    def _acquire_capture_iface(self) -> None:
-        try:
-            import omni.kit.renderer_capture as rc
-            self._capture_iface = rc.acquire_renderer_capture_interface()
-        except Exception as exc:
+    def _prepare_viewport_capture(self) -> None:
+        viewport = tutils.get_active_viewport_api()
+        if viewport is None:
             import omni.log
             omni.log.warn(
-                f"[scene_recorder] omni.kit.renderer_capture unavailable, "
-                f"video frames will not be saved: {exc}"
+                "[scene_recorder] No active viewport; video frames will not be saved"
             )
-            self._capture_iface = None
+            self._viewport_capture_enabled = False
+            return
+        self._viewport_capture_enabled = True
 
     def _queue_frame_capture(self, frame_idx: int) -> None:
-        if self._capture_iface is None:
+        if not self._viewport_capture_enabled:
             return
         frame_path = os.path.join(self.frames_dir, f"frame_{frame_idx:06d}.png")
-        try:
-            self._capture_iface.capture_next_frame_swapchain_to_file(frame_path)
+        if tutils.queue_viewport_frame_capture(frame_path):
             self._frame_paths.append(frame_path)
-        except Exception as exc:
-            import omni.log
-            omni.log.warn(f"[scene_recorder] Frame capture failed at frame {frame_idx}: {exc}")
 
 
 # ---------------------------------------------------------------------------

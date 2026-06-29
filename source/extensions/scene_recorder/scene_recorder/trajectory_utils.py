@@ -26,6 +26,12 @@ open_movie_capture_window()
 trigger_movie_capture(output_path, start_frame, end_frame, fps)
     Programmatically start a movie-capture render via the viewport capture
     interface.  Falls back gracefully when the extension is absent.
+
+queue_viewport_frame_capture(frame_path)
+    Schedule a single viewport-only PNG capture (scene render, no UI chrome).
+
+capture_viewport_frame_sync(frame_path, update_pumps=3)
+    Capture the active viewport to a file, pumping Kit updates until done.
 """
 from __future__ import annotations
 
@@ -201,6 +207,60 @@ def set_timeline_range(fps: float, total_frames: int) -> None:
         tl.set_current_time(0.0)
     except Exception as exc:
         _warn(f"set_timeline_range failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Viewport-only frame capture (excludes Kit UI chrome)
+# ---------------------------------------------------------------------------
+
+def get_active_viewport_api():
+    """Return the active viewport API, or None when no viewport is available."""
+    try:
+        import omni.kit.viewport.utility as vpu
+
+        viewport = vpu.get_active_viewport()
+        if viewport is not None:
+            return viewport
+        vpw = vpu.get_active_viewport_window()
+        if vpw is not None:
+            return getattr(vpw, "viewport_api", None)
+    except Exception:
+        pass
+    return None
+
+
+def queue_viewport_frame_capture(frame_path: str) -> bool:
+    """Schedule a viewport-only PNG capture (scene render, not the full app window)."""
+    viewport = get_active_viewport_api()
+    if viewport is None:
+        _warn("queue_viewport_frame_capture: no active viewport")
+        return False
+    try:
+        import omni.kit.viewport.utility as vpu
+
+        vpu.capture_viewport_to_file(viewport, file_path=frame_path)
+        return True
+    except Exception as exc:
+        _warn(f"queue_viewport_frame_capture failed: {exc}")
+        return False
+
+
+def capture_viewport_frame_sync(frame_path: str, update_pumps: int = 3) -> bool:
+    """Capture the active viewport to *frame_path*, pumping updates until the file exists."""
+    if not queue_viewport_frame_capture(frame_path):
+        return False
+    try:
+        import omni.kit.app
+
+        app = omni.kit.app.get_app()
+        for _ in range(max(1, update_pumps)):
+            app.update()
+            if os.path.isfile(frame_path):
+                return True
+        return os.path.isfile(frame_path)
+    except Exception as exc:
+        _warn(f"capture_viewport_frame_sync failed: {exc}")
+        return False
 
 
 # ---------------------------------------------------------------------------

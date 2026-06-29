@@ -495,12 +495,10 @@ class SceneRecorderExtension(omni.ext.IExt):
         interface was not available.
         """
         try:
-            import omni.kit.renderer_capture as rc
             import omni.kit.app
             import omni.timeline
 
-            capture = rc.acquire_renderer_capture_interface()
-            if capture is None:
+            if tutils.get_active_viewport_api() is None:
                 return False
 
             os.makedirs(frames_dir, exist_ok=True)
@@ -510,12 +508,11 @@ class SceneRecorderExtension(omni.ext.IExt):
             for idx in range(total_frames):
                 time_s = idx / fps
                 tl.set_current_time(time_s)
-                # Let the engine render one frame at the new time.
                 app.update()
                 frame_path = os.path.join(frames_dir, f"frame_{idx:06d}.png")
-                capture.capture_next_frame_swapchain_to_file(frame_path)
-                # Pump once more so the capture actually fires.
-                app.update()
+                if not tutils.capture_viewport_frame_sync(frame_path, update_pumps=3):
+                    _warn(f"_capture_replay_frames: viewport capture failed at frame {idx}")
+                    return False
 
             return True
 
