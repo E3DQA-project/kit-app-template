@@ -474,13 +474,40 @@ class SceneRecorderExtension(omni.ext.IExt):
         tutils.activate_recorder_camera(stage, baked)
         tutils.set_timeline_range(fps, total)
         self._baked_cam_path = baked
+
+        # Hide the camera gizmo (the gray videocam icon) and clear the USD
+        # selection so no transform axes appear on the RecorderCamera prim.
+        try:
+            import carb.settings
+            s = carb.settings.get_settings()
+            s.set("/app/viewport/show/camera", False)
+            s.set("/app/viewport/outline/enabled", False)
+        except Exception:
+            pass
+        try:
+            import omni.usd
+            omni.usd.get_context().get_selection().clear_selected_prim_paths()
+        except Exception:
+            pass
+
+        # Auto-play so the trajectory is immediately visible.
+        try:
+            import omni.timeline
+            tl = omni.timeline.get_timeline_interface()
+            tl.play()
+        except Exception:
+            pass
+
         self._set_replay_info(
             f"Replay ready: {total} frames @ {fps:.0f} fps.\n"
             f"Camera prim: {baked}\n"
-            "Press Play on the timeline to preview the path."
+            "Playing trajectory preview. Click Export to render the video."
         )
 
     def _on_export_replay_video(self) -> None:
+        """Validate inputs then launch the async export pipeline."""
+        import asyncio
+
         if self._loaded_trajectory is None:
             self._set_replay_info("Load and set up a trajectory first.")
             return
@@ -508,22 +535,23 @@ class SceneRecorderExtension(omni.ext.IExt):
                 len(self._loaded_trajectory.get("trajectory", [])),
             )
         )
+        frames_dir = os.path.splitext(video_path)[0] + "_frames"
 
-        # Derive a temporary frames folder from the video path.
-        video_stem = os.path.splitext(video_path)[0]
-        frames_dir = video_stem + "_frames"
+        self._set_replay_info(f"Exporting {total} frames @ {fps:.0f} fps…")
+        asyncio.ensure_future(
+            self._export_replay_video_async(fps, total, frames_dir, video_path)
+        )
 
-        self._set_replay_info("Starting replay frame capture…")
-        ok = self._capture_replay_frames(fps, total, frames_dir)
+    async def _export_replay_video_async(
+        self, fps: float, total_frames: int, frames_dir: str, video_path: str
+    ) -> None:
+        """Async export: capture frames frame-by-frame, then assemble with ffmpeg."""
+        ok = await self._capture_replay_frames_async(fps, total_frames, frames_dir)
         if not ok:
-            self._set_replay_info(
-                "Frame capture could not be started programmatically.\n"
-                "Play the timeline manually while 'Capture video simultaneously' "
-                "is on in the Record section as a workaround."
-            )
+            self._set_replay_info("Frame capture failed. Check the log for details.")
             return
 
-        self._set_replay_info(f"Assembling {total} frames with ffmpeg…")
+        self._set_replay_info(f"Assembling {total_frames} frames with ffmpeg…")
         assembled = tutils.assemble_video_from_frames(frames_dir, fps, video_path)
         if assembled:
             self._set_replay_info(f"Replay video saved to:\n{video_path}")
@@ -533,38 +561,67 @@ class SceneRecorderExtension(omni.ext.IExt):
                 f"Raw frames are in: {frames_dir}"
             )
 
-    def _capture_replay_frames(
+    async def _capture_replay_frames_async(
         self, fps: float, total_frames: int, frames_dir: str
     ) -> bool:
         """Drive the timeline frame-by-frame and capture each rendered frame.
 
-        Returns True when all frames were queued, False if the capture
-        interface was not available.
+        Uses the async Kit API so there is no reentrant app.update() call —
+        the synchronous variant caused a SIGSEGV by pumping the render loop
+        from inside its own event callback.
         """
         try:
             import omni.kit.app
+            import omni.kit.viewport.utility as vpu
             import omni.timeline
 
-            if tutils.get_active_viewport_api() is None:
+            viewport = tutils.get_active_viewport_api()
+            if viewport is None:
+                _warn("_capture_replay_frames_async: no active viewport")
                 return False
 
             os.makedirs(frames_dir, exist_ok=True)
             tl = omni.timeline.get_timeline_interface()
             app = omni.kit.app.get_app()
 
+            # Ensure camera gizmo and selection axes are hidden in captured frames.
+            try:
+                import carb.settings
+                s = carb.settings.get_settings()
+                s.set("/app/viewport/show/camera", False)
+                s.set("/app/viewport/outline/enabled", False)
+            except Exception:
+                pass
+            try:
+                import omni.usd
+                omni.usd.get_context().get_selection().clear_selected_prim_paths()
+            except Exception:
+                pass
+
+            # Stop any active timeline playback before scrubbing manually.
+            tl.stop()
+
             for idx in range(total_frames):
                 time_s = idx / fps
                 tl.set_current_time(time_s)
-                app.update()
+
+                # Yield to Kit's event loop so the renderer updates to the new time.
+                await app.next_update_async()
+
                 frame_path = os.path.join(frames_dir, f"frame_{idx:06d}.png")
-                if not tutils.capture_viewport_frame_sync(frame_path, update_pumps=3):
-                    _warn(f"_capture_replay_frames: viewport capture failed at frame {idx}")
-                    return False
+                cap = vpu.capture_viewport_to_file(viewport, file_path=frame_path)
+                # Wait for the viewport capture future to resolve.
+                await cap.wait_for_result(completion_frames=2)
+
+                if idx % 10 == 0:
+                    self._set_replay_info(
+                        f"Capturing frame {idx + 1}/{total_frames}…"
+                    )
 
             return True
 
         except Exception as exc:
-            _warn(f"_capture_replay_frames failed: {exc}")
+            _warn(f"_capture_replay_frames_async failed: {exc}")
             return False
 
     # ------------------------------------------------------------------

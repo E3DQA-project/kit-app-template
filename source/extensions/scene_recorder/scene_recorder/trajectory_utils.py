@@ -100,6 +100,10 @@ def bake_trajectory_to_usd(
     """Create (or overwrite) a USD Camera prim at *cam_prim_path* with
     time-sampled translate + orient ops derived from *trajectory_data*.
 
+    All writes go to the **session layer** so the source USDZ (read-only) is
+    never touched.  Stage time-code metadata is also written to the session
+    layer so it overrides the root layer without corrupting it.
+
     Returns the prim path string on success, ``None`` on failure.
     """
     try:
@@ -112,40 +116,45 @@ def bake_trajectory_to_usd(
             _warn("bake_trajectory_to_usd: empty trajectory, nothing to bake.")
             return None
 
-        # Remove existing prim so we get a clean slate.
+        session_layer = stage.GetSessionLayer()
         prim_path = Sdf.Path(cam_prim_path)
-        if stage.GetPrimAtPath(prim_path).IsValid():
-            stage.RemovePrim(prim_path)
 
-        usd_cam = UsdGeom.Camera.Define(stage, prim_path)
-        xformable = UsdGeom.Xformable(usd_cam)
+        # All writes go to the session layer so the root USDZ is untouched.
+        with Usd.EditContext(stage, Usd.EditTarget(session_layer)):
+            # Remove any previous bake on the session layer.
+            if stage.GetPrimAtPath(prim_path).IsValid():
+                stage.RemovePrim(prim_path)
 
-        # Add xform ops: translate then orient (no scale needed for a camera).
-        translate_op = xformable.AddTranslateOp(opSuffix="recPos")
-        orient_op = xformable.AddOrientOp(opSuffix="recRot")
+            usd_cam = UsdGeom.Camera.Define(stage, prim_path)
+            xformable = UsdGeom.Xformable(usd_cam)
 
-        for fd in trajectory:
-            frame: int = fd["frame"]
-            time = Usd.TimeCode(frame)
+            translate_op = xformable.AddTranslateOp(opSuffix="recPos")
+            orient_op = xformable.AddOrientOp(opSuffix="recRot")
 
-            pos = fd.get("position", [0.0, 0.0, 0.0])
-            translate_op.Set(Gf.Vec3d(pos[0], pos[1], pos[2]), time)
+            for fd in trajectory:
+                frame: int = fd["frame"]
+                time = Usd.TimeCode(frame)
 
-            q = fd.get("rotation_quat", [0.0, 0.0, 0.0, 1.0])
-            # rotation_quat stored as [qx, qy, qz, qw]
-            # UsdGeom orient op requires GfQuatf (single-precision).
-            gf_quat = Gf.Quatf(float(q[3]), Gf.Vec3f(float(q[0]), float(q[1]), float(q[2])))
-            orient_op.Set(gf_quat, time)
+                pos = fd.get("position", [0.0, 0.0, 0.0])
+                translate_op.Set(Gf.Vec3d(pos[0], pos[1], pos[2]), time)
 
-        # Copy clipping range from first matrix if available (best-effort).
-        _try_set_clipping(usd_cam, trajectory[0])
+                q = fd.get("rotation_quat", [0.0, 0.0, 0.0, 1.0])
+                # [qx, qy, qz, qw] → GfQuatf(real, imaginary)
+                gf_quat = Gf.Quatf(float(q[3]), Gf.Vec3f(float(q[0]), float(q[1]), float(q[2])))
+                orient_op.Set(gf_quat, time)
 
-        # Sync stage time metadata.
-        total = len(trajectory)
-        stage.SetStartTimeCode(0.0)
-        stage.SetEndTimeCode(float(total - 1))
-        stage.SetTimeCodesPerSecond(fps)
-        stage.SetFramesPerSecond(fps)
+            _try_set_clipping(usd_cam, trajectory[0])
+            _apply_camera_optics(usd_cam, trajectory[0], stage)
+
+            # Write time-code metadata to the session layer only, so the root
+            # USDZ's authored time codes (which govern its own geometry) are
+            # not altered — changing them on the root layer would resample all
+            # geometry at wrong time codes and corrupt the scene.
+            total = len(trajectory)
+            session_layer.startTimeCode = 0.0
+            session_layer.endTimeCode = float(total - 1)
+            session_layer.timeCodesPerSecond = fps
+            session_layer.framesPerSecond = fps
 
         return cam_prim_path
 
@@ -165,6 +174,81 @@ def _try_set_clipping(usd_cam, first_frame: Dict[str, Any]) -> None:
         usd_cam.CreateClippingRangeAttr().Set(Gf.Vec2f(near, far))
     except Exception:
         pass
+
+
+def _apply_camera_optics(usd_cam, first_frame: Dict[str, Any], stage) -> None:
+    """Copy focal length and aperture onto *usd_cam* so the replay FOV matches recording.
+
+    Priority:
+    1. Values saved in the trajectory's first frame (new recordings).
+    2. Values from the active viewport camera in the current stage (fallback for
+       older trajectories that pre-date this field).
+    3. Values from /BrowserCamera if present (set by usdz_folder_browser).
+    4. Leave unchanged (USD default 50 mm / 20.955 mm).
+    """
+    focal_length = first_frame.get("focal_length")
+    h_aperture   = first_frame.get("horizontal_aperture")
+    v_aperture   = first_frame.get("vertical_aperture")
+
+    # Fallback: read from the stage's current camera prims.
+    if focal_length is None:
+        try:
+            from pxr import UsdGeom as _UG, Usd as _Usd
+
+            def _read_from_prim(prim_path: str):
+                prim = stage.GetPrimAtPath(prim_path)
+                if not prim or not prim.IsValid():
+                    return None, None, None
+                cam = _UG.Camera(prim)
+                t = _Usd.TimeCode.Default()
+                fl = ha = va = None
+                try:
+                    fl = float(cam.GetFocalLengthAttr().Get(t))
+                except Exception:
+                    pass
+                try:
+                    ha = float(cam.GetHorizontalApertureAttr().Get(t))
+                except Exception:
+                    pass
+                try:
+                    va = float(cam.GetVerticalApertureAttr().Get(t))
+                except Exception:
+                    pass
+                return fl, ha, va
+
+            # Try active viewport camera first.
+            try:
+                import omni.kit.viewport.utility as vpu
+                vpw = vpu.get_active_viewport_window()
+                if vpw:
+                    api = getattr(vpw, "viewport_api", None)
+                    cam_path = getattr(api, "camera_path", None) if api else None
+                    if cam_path:
+                        focal_length, h_aperture, v_aperture = _read_from_prim(str(cam_path))
+            except Exception:
+                pass
+
+            # Try /BrowserCamera as a second fallback.
+            if focal_length is None:
+                focal_length, h_aperture, v_aperture = _read_from_prim("/BrowserCamera")
+        except Exception:
+            pass
+
+    if focal_length is not None:
+        try:
+            usd_cam.CreateFocalLengthAttr().Set(float(focal_length))
+        except Exception:
+            pass
+    if h_aperture is not None:
+        try:
+            usd_cam.CreateHorizontalApertureAttr().Set(float(h_aperture))
+        except Exception:
+            pass
+    if v_aperture is not None:
+        try:
+            usd_cam.CreateVerticalApertureAttr().Set(float(v_aperture))
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

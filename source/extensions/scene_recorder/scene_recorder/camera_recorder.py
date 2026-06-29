@@ -275,12 +275,38 @@ def _read_camera_pose() -> Optional[Dict[str, Any]]:
         # Full 4x4 matrix (row-major list-of-lists)
         matrix = [[mat[r][c] for c in range(4)] for r in range(4)]
 
-        return {
+        # Camera optics — needed to reproduce the same FOV during replay.
+        # UsdGeom.Camera stores these in tenths-of-a-mm (scene units for film).
+        usd_cam = UsdGeom.Camera(cam_prim)
+        focal_length = None
+        h_aperture = None
+        v_aperture = None
+        try:
+            fl_attr = usd_cam.GetFocalLengthAttr()
+            if fl_attr and fl_attr.IsAuthored():
+                focal_length = float(fl_attr.Get(time))
+            ha_attr = usd_cam.GetHorizontalApertureAttr()
+            if ha_attr and ha_attr.IsAuthored():
+                h_aperture = float(ha_attr.Get(time))
+            va_attr = usd_cam.GetVerticalApertureAttr()
+            if va_attr and va_attr.IsAuthored():
+                v_aperture = float(va_attr.Get(time))
+        except Exception:
+            pass
+
+        frame_data: Dict[str, Any] = {
             "position": pos,
             "rotation_euler_deg": euler,
             "rotation_quat": quat,
             "transform_matrix_4x4": matrix,
         }
+        if focal_length is not None:
+            frame_data["focal_length"] = focal_length
+        if h_aperture is not None:
+            frame_data["horizontal_aperture"] = h_aperture
+        if v_aperture is not None:
+            frame_data["vertical_aperture"] = v_aperture
+        return frame_data
 
     except Exception as exc:
         try:
