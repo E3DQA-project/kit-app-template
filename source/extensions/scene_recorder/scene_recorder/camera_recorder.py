@@ -41,10 +41,12 @@ class CameraRecorder:
         capture_video: bool = False,
         frames_dir: str = "",
     ) -> None:
+        # Configurable by user
         self.sample_fps: float = max(1.0, sample_fps)
         self.capture_video: bool = capture_video
         self.frames_dir: str = frames_dir
 
+        # Internal states
         self._trajectory: List[Dict[str, Any]] = []
         self._frame_paths: List[str] = []
         self._update_sub = None
@@ -52,7 +54,7 @@ class CameraRecorder:
         self._frame_idx: int = 0
         self._on_frame_cb: Optional[Callable[[int], None]] = None
         self._recording: bool = False
-        self._capture_iface = None  # omni.renderer_capture interface, lazily acquired
+        self._capture_iface = None  # omni.kit.renderer_capture interface, lazily acquired
 
     # ------------------------------------------------------------------
     # Public API
@@ -68,6 +70,23 @@ class CameraRecorder:
 
     def start(self, on_frame_cb: Optional[Callable[[int], None]] = None) -> None:
         """Begin recording.  *on_frame_cb* is called with the frame count after each sample."""
+        """
+        This line tells Python (and type checkers like Mypy) exactly what inputs the method expects and what it returns.
+
+            - on_frame_cb: This is the name of the argument. It stands for "on frame callback".
+
+            - Callable[[int], None]: This means the argument must be a function.
+
+            - [int] part means this function must accept exactly one integer as an argument (in this case, the frame count).
+
+            - , None part means this function shouldn't return anything.
+
+            - Optional[...]: This means the argument can either be the function we just described, or it can be None.
+
+            - = None: This sets the default value. If you call start(), it will default to None.
+
+            - -> None: This means the start method itself doesn't return any value.
+        """
         if self._recording:
             return
         self._trajectory = []
@@ -78,7 +97,7 @@ class CameraRecorder:
         self._recording = True
 
         if self.capture_video:
-            self._ensure_frames_dir()
+            self._ensure_frames_dir()   # Set the frames directory (self.frames_dir) to the default directory of /home/pierce/scene_recorder_frames if it is not set, otherwise mkdir
             self._acquire_capture_iface()
 
         self._subscribe_update()
@@ -93,10 +112,17 @@ class CameraRecorder:
             list of PNG paths written during recording (empty if
             *capture_video* was False).
         """
+        import omni.log
         if not self._recording:
+            omni.log.warn(f"[scene_rewcorder] Not recording")
+            omni.log.warn(f"[scene_recorder] Trajectory: {self._trajectory}")
+            omni.log.warn(f"[scene_recorder] Frame paths: {self._frame_paths}")
             return list(self._trajectory), list(self._frame_paths)
         self._recording = False
         self._unsubscribe_update()
+        omni.log.warn(f"[scene_recorder] Stopped recording")
+        omni.log.warn(f"[scene_recorder] Trajectory: {self._trajectory}")
+        omni.log.warn(f"[scene_recorder] Frame paths: {self._frame_paths}")
         return list(self._trajectory), list(self._frame_paths)
 
     def discard(self) -> None:
@@ -114,9 +140,9 @@ class CameraRecorder:
         try:
             import omni.kit.app
             self._update_sub = (
-                omni.kit.app.get_app()
-                .get_update_event_stream()
-                .create_subscription_to_pop(self._on_update, name="scene_recorder_poll")
+                omni.kit.app.get_app()  # Grabs the core instance of the running Omniverse application engine.
+                .get_update_event_stream()  # Accesses the application's "heartbeat" stream. This stream fires an event every single time the app updates its state or renders a new frame (usually 60+ times a second).
+                .create_subscription_to_pop(self._on_update, name="scene_recorder_poll")  # This is where the magic happens. It registers a listener (a subscription) onto that heartbeat stream. Whenever the stream fires an event, the _on_update method will be called.
             )
         except Exception as exc:
             import omni.log
@@ -172,6 +198,7 @@ class CameraRecorder:
 
     def _ensure_frames_dir(self) -> None:
         d = self.frames_dir
+        # If the frames directory is not set, use the default directory of /home/pierce/scene_recorder_frames
         if not d:
             d = os.path.join(os.path.expanduser("~"), "scene_recorder_frames")
             self.frames_dir = d
@@ -179,12 +206,12 @@ class CameraRecorder:
 
     def _acquire_capture_iface(self) -> None:
         try:
-            import omni.renderer_capture as rc
+            import omni.kit.renderer_capture as rc
             self._capture_iface = rc.acquire_renderer_capture_interface()
         except Exception as exc:
             import omni.log
             omni.log.warn(
-                f"[scene_recorder] omni.renderer_capture unavailable, "
+                f"[scene_recorder] omni.kit.renderer_capture unavailable, "
                 f"video frames will not be saved: {exc}"
             )
             self._capture_iface = None

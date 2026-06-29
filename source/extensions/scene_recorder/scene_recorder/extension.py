@@ -495,7 +495,7 @@ class SceneRecorderExtension(omni.ext.IExt):
         interface was not available.
         """
         try:
-            import omni.renderer_capture as rc
+            import omni.kit.renderer_capture as rc
             import omni.kit.app
             import omni.timeline
 
