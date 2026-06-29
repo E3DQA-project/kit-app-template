@@ -400,6 +400,20 @@ def _unload_stage() -> None:
         pass
 
 
+def _sync_scene_recorder_paths(usdz_path: str) -> None:
+    """Update scene_recorder UI paths when a USDZ scene finishes loading."""
+    try:
+        from scene_recorder.extension import SceneRecorderExtension
+
+        ext = SceneRecorderExtension.get_instance()
+        if ext is not None:
+            ext.sync_paths_for_usdz(usdz_path)
+    except ImportError:
+        pass
+    except Exception as exc:
+        omni.log.warn(f"[usdz_folder_browser] scene_recorder path sync failed: {exc}")
+
+
 def _open_stage(path: str) -> None:
     import omni.usd
     omni.usd.get_context().open_stage(os.path.abspath(path))
@@ -943,6 +957,7 @@ class UsdzFolderBrowserExtension(omni.ext.IExt):
             self._set_status(
                 f"[{p['idx_tag']}] {os.path.basename(p['path'])}  |  {orient_tag}  |  {cam_tag}"
             )
+            _sync_scene_recorder_paths(p["path"])
             self._persist()
         except Exception as exc:
             self._set_status(f"Post-load error: {exc}")

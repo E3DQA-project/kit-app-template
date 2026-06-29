@@ -27,12 +27,18 @@ except ImportError:
     _HAS_FILEPICKER = False
 
 
+_scene_recorder_ext_instance: Optional["SceneRecorderExtension"] = None
+
+
 # ---------------------------------------------------------------------------
 # Extension
 # ---------------------------------------------------------------------------
 
 class SceneRecorderExtension(omni.ext.IExt):
     def on_startup(self, _ext_id: str) -> None:
+        global _scene_recorder_ext_instance
+        _scene_recorder_ext_instance = self
+
         self._recorder: CameraRecorder = CameraRecorder(sample_fps=30.0)
         self._loaded_trajectory: Optional[Dict[str, Any]] = None
         self._baked_cam_path: Optional[str] = None
@@ -64,10 +70,51 @@ class SceneRecorderExtension(omni.ext.IExt):
         self._build_ui()
 
     def on_shutdown(self) -> None:
+        global _scene_recorder_ext_instance
         if self._recorder.is_recording:
             self._recorder.discard()
         self._picker = None
         self._window = None
+        _scene_recorder_ext_instance = None
+
+    @staticmethod
+    def get_instance() -> Optional["SceneRecorderExtension"]:
+        return _scene_recorder_ext_instance
+
+    def sync_paths_for_usdz(self, usdz_path: str) -> None:
+        """Point record/replay UI paths at scene-local folders for *usdz_path*."""
+        paths = tutils.paths_for_usdz(usdz_path)
+        os.makedirs(paths["frames_dir"], exist_ok=True)
+        os.makedirs(os.path.dirname(paths["replay_video_path"]), exist_ok=True)
+
+        if self._recorder.is_recording:
+            self._recorder.discard()
+            self._btn_start_rec.enabled = True
+            self._btn_stop_rec.enabled = False
+            self._set_rec_status("Idle")
+
+        self._rec_frames_dir_model.set_value(paths["frames_dir"])
+        self._rec_json_path_model.set_value(paths["json_path"])
+        self._rec_video_path_model.set_value(paths["recording_video_path"])
+        self._replay_json_path_model.set_value(paths["json_path"])
+        self._replay_video_path_model.set_value(paths["replay_video_path"])
+
+        self._loaded_trajectory = None
+        self._baked_cam_path = None
+        self._in_memory_trajectory = []
+        self._in_memory_frame_paths = []
+        self._in_memory_fps = 30.0
+        self._set_rec_info("")
+        self._set_replay_status("")
+        self._set_replay_info("")
+
+        omni.log.info(
+            f"[scene_recorder] Synced paths for {os.path.basename(usdz_path)}:\n"
+            f"  frames: {paths['frames_dir']}\n"
+            f"  json:   {paths['json_path']}\n"
+            f"  record: {paths['recording_video_path']}\n"
+            f"  replay: {paths['replay_video_path']}"
+        )
 
     # ------------------------------------------------------------------
     # UI construction

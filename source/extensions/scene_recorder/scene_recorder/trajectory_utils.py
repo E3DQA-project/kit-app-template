@@ -32,6 +32,9 @@ queue_viewport_frame_capture(frame_path)
 
 capture_viewport_frame_sync(frame_path, update_pumps=3)
     Capture the active viewport to a file, pumping Kit updates until done.
+
+paths_for_usdz(usdz_path)
+    Derive scene_recorder output paths from a loaded USDZ file location.
 """
 from __future__ import annotations
 
@@ -261,6 +264,30 @@ def capture_viewport_frame_sync(frame_path: str, update_pumps: int = 3) -> bool:
     except Exception as exc:
         _warn(f"capture_viewport_frame_sync failed: {exc}")
         return False
+
+
+def paths_for_usdz(usdz_path: str) -> Dict[str, str]:
+    """Derive default scene_recorder output paths for a loaded USDZ file.
+
+    All paths are rooted at the directory containing *usdz_path*:
+
+    - ``json_path`` — ``{work_dir}/trajectory_recording.json``
+    - ``frames_dir`` / ``recording_video_path`` — under
+      ``scene_recorder_frames/{usdz_stem}/``
+    - ``replay_video_path`` — under ``trajectory_replay_videos/{usdz_stem}/``
+    """
+    usdz_path = os.path.abspath(os.path.expanduser(usdz_path))
+    work_dir = os.path.dirname(usdz_path)
+    usdz_stem = os.path.splitext(os.path.basename(usdz_path))[0]
+    scene_root = os.path.join(work_dir, "scene_recorder_frames", usdz_stem)
+    return {
+        "frames_dir": scene_root,
+        "json_path": os.path.join(work_dir, "trajectory_recording.json"),
+        "recording_video_path": os.path.join(scene_root, "trajectory_recording.mp4"),
+        "replay_video_path": os.path.join(
+            work_dir, "trajectory_replay_videos", usdz_stem, "trajectory_replay.mp4"
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------

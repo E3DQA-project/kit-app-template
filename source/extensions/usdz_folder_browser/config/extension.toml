@@ -23,6 +23,7 @@ repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
 "omni.usd" = {}
 "omni.kit.commands" = {}
 "omni.kit.viewport.utility" = {}
+"scene_recorder" = { optional = true }
 # omni.kit.window.filepicker is imported at runtime via try/except — not listed here
 # so the extension resolver never fails on its absence in minimal app configurations.
 
