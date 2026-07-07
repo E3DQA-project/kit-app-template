@@ -1,0 +1,1 @@
+# My USD Viewer Setup Extension [nycu.my_usd_viewer_setup_extension]

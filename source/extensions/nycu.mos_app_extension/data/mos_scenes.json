@@ -1,0 +1,14 @@
+[
+  {
+    "session": 1,
+    "filepaths": [
+      "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt.usdz",
+      "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.25.usdz",
+      "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.50.usdz",
+      "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.75.usdz",
+      "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_spatial_noise_s0.0010.usdz",
+      "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_spatial_noise_s0.0050.usdz",
+      "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_spatial_noise_s0.0100.usdz"
+    ]
+  }
+]

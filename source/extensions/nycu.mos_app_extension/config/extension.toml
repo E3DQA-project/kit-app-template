@@ -1,0 +1,24 @@
+[package]
+title = "MOS App Extension"
+version = "0.1.0"
+description = "Participant name prompt, ordered USDZ scene list, scoring panel, and score persistence for the MOS evaluation app."
+category = "Tools"
+keywords = ["kit", "extension", "mos", "evaluation", "scoring"]
+readme  = "docs/README.md"
+repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
+
+[dependencies]
+"omni.kit.uiapp" = {}
+"omni.usd" = {}
+"omni.kit.commands" = {}
+"omni.kit.viewport.utility" = {}
+
+[settings]
+
+[[python.module]]
+name = "nycu.mos_app_extension"
+
+[documentation]
+pages = [
+    "docs/Overview.md",
+]

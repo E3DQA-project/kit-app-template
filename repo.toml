@@ -119,6 +119,8 @@ apps = [
     "${root}/source/apps/my_editor_1_streaming.kit",
     "${root}/source/apps/my_editor_clean.kit",
     "${root}/source/apps/nycu.e3dqa_scene_viewer.kit",
+    "${root}/source/apps/nycu.mos_app.kit",
+    "${root}/source/apps/nycu.mos_app_retry.kit",
 ]
 
 registries = [

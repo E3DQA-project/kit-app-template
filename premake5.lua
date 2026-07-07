@@ -19,3 +19,7 @@ repo_build.prebuild_copy {
 define_app("my_editor_1.kit")
 define_app("my_editor_clean.kit")
 define_app("nycu.e3dqa_scene_viewer.kit")
+define_app("nycu.mos_app.kit")
+
+-- Extensions
+include("source/extensions/nycu.mos_app_extension")
