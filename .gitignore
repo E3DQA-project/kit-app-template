@@ -39,3 +39,7 @@ deps/**/user.toml
 
 # claude code configs
 .claude/**
+
+# Runtime MOS scores (local study data)
+source/data/scores/*.json
+!source/data/scores/.gitkeep

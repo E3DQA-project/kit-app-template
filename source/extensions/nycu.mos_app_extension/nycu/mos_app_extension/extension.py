@@ -22,6 +22,7 @@ import asyncio
 import gc
 import json
 import os
+import time
 from datetime import datetime, timezone
 from math import sqrt
 from typing import Any, Dict, List, Optional, Tuple
@@ -36,6 +37,8 @@ import omni.kit.commands
 import omni.log
 import omni.ui as ui
 import omni.usd
+
+from .scene_preload import DiskPreloader, DualSlotController, gpu_resident_enabled
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -381,7 +384,9 @@ def _scene_preset_rot3(preset: str):
         return None
 
 
-def _apply_orientation(preset: str, force_z_up: bool) -> bool:
+def _apply_orientation(
+    preset: str, force_z_up: bool, root_path: str = "/World"
+) -> bool:
     try:
         from pxr import Gf, Sdf, UsdGeom
 
@@ -405,7 +410,9 @@ def _apply_orientation(preset: str, force_z_up: bool) -> bool:
             m3[2][0], m3[2][1], m3[2][2], 0.0,
             0.0, 0.0, 0.0, 1.0,
         )
-        root = stage.GetPrimAtPath(Sdf.Path("/World"))
+        root = stage.GetPrimAtPath(Sdf.Path(root_path))
+        if not root or not root.IsValid():
+            root = stage.GetPrimAtPath(Sdf.Path("/World"))
         if not root or not root.IsValid():
             for child in stage.GetPseudoRoot().GetChildren():
                 if child and child.IsValid():
@@ -414,15 +421,10 @@ def _apply_orientation(preset: str, force_z_up: bool) -> bool:
         if not root or not root.IsValid():
             return False
         xf = UsdGeom.Xformable(root)
-        ops = xf.GetOrderedXformOps()
-        if ops:
-            try:
-                ops[0].Set(m)
-            except Exception:
-                xf.ClearXformOpOrder()
-                xf.AddTransformOp().Set(m)
-        else:
-            xf.AddTransformOp().Set(m)
+        # Always reset op order so a prior mos_park translate cannot be
+        # overwritten as if it were a transform matrix.
+        xf.ClearXformOpOrder()
+        xf.AddTransformOp().Set(m)
         return True
     except Exception as exc:
         omni.log.warn(f"[{_EXT_ID}] _apply_orientation error: {exc}")
@@ -540,6 +542,13 @@ class MosAppExtension(omni.ext.IExt):
         self._stage_sub = None
         self._pending_abs_path: Optional[str] = None
 
+        # Phase A disk prefetch + Phase C GPU-resident dual slots.
+        self._preloader = DiskPreloader()
+        self._slots = DualSlotController(self._preloader)
+        self._slots.orient_slot = lambda p: _apply_orientation(
+            _ORIENT_PRESET, _FORCE_Z_UP, root_path=p
+        )
+
         # UI
         self._prompt_win: Optional[ui.Window] = None
         self._status_win: Optional[ui.Window] = None
@@ -568,6 +577,14 @@ class MosAppExtension(omni.ext.IExt):
     def on_shutdown(self) -> None:
         self._unregister_keyboard()
         self._stage_sub = None
+        try:
+            self._slots.shutdown()
+        except Exception:
+            pass
+        try:
+            self._preloader.shutdown()
+        except Exception:
+            pass
         self._prompt_win = None
         self._status_win = None
         self._scoring_win = None
@@ -990,29 +1007,97 @@ class MosAppExtension(omni.ext.IExt):
     # ── Scene loading ──────────────────────────────────────────────────────────
 
     def _load_scene(self) -> None:
+        """Entry point for scene changes — prefers GPU standby swap when ready."""
+        asyncio.ensure_future(self._load_scene_async())
+
+    async def _load_scene_async(self) -> None:
         path = self._scenes[self._index]
-        n    = len(self._scenes)
+        n = len(self._scenes)
+        disk_status = self._preloader.status_for(path)
+        gpu_ready = self._slots.standby_ready_for(path)
         omni.log.warn(
-            f"[{_EXT_ID}] Loading {self._index + 1}/{n}: {path}"
+            f"[{_EXT_ID}] Loading {self._index + 1}/{n}: {os.path.basename(path)} "
+            f"(disk={disk_status}, gpu_standby={gpu_ready}, "
+            f"mode={'gpu_resident' if gpu_resident_enabled() else 'legacy/disk'})"
         )
         self._set_status(
             f"Loading scene {self._index + 1}/{n}: {os.path.basename(path)} …"
         )
         self._state = _St.LOADING
         self._initial_cam_xform = None
+        t0 = time.perf_counter()
 
-        abs_url = os.path.normcase(os.path.abspath(path))
+        # ── Fast path: GPU-resident standby already composed ─────────────────
+        if gpu_resident_enabled() and self._slots.activate_standby(path):
+            self._post_load(orient_root=self._slots.active_slot_path())
+            omni.log.warn(
+                f"[{_EXT_ID}] Transition (GPU swap) "
+                f"{time.perf_counter() - t0:.3f}s"
+            )
+            return
+
+        # ── Dual-slot path: compose into wrapper stage ───────────────────────
+        if gpu_resident_enabled():
+            self._slots.cancel()
+            self._preloader.cancel()
+            try:
+                if not self._slots.bootstrapped:
+                    ok, err = await self._slots.bootstrap_active(path)
+                else:
+                    ok, err = await self._slots.load_into_active(path)
+            except Exception as exc:
+                ok, err = False, str(exc)
+            if ok:
+                self._post_load(orient_root=self._slots.active_slot_path())
+                omni.log.warn(
+                    f"[{_EXT_ID}] Transition (dual-slot load) "
+                    f"{time.perf_counter() - t0:.1f}s"
+                )
+                return
+            omni.log.warn(
+                f"[{_EXT_ID}] Dual-slot load failed ({err}); "
+                "falling back to open_stage"
+            )
+            self._slots.shutdown()
+
+        # ── Legacy path: unload + open_stage (Phase A cache if available) ────
+        await self._load_scene_legacy(path, t0)
+
+    async def _load_scene_legacy(self, path: str, t0: float) -> None:
+        open_path = self._preloader.resolve_open_path(path)
+        self._preloader.cancel()
+        self._preloader.pin_open_path(open_path)
+
+        abs_url = os.path.normcase(os.path.abspath(open_path))
         self._pending_abs_path = abs_url
+        opened = asyncio.Event()
+        failed = asyncio.Event()
 
-        # Subscribe BEFORE opening so we never miss the OPENED event.
+        def _on_event(event) -> None:
+            pending = self._pending_abs_path
+            if pending is None:
+                return
+            et = event.type
+            if et == int(getattr(omni.usd.StageEventType, "OPEN_FAILED", -1)):
+                failed.set()
+                return
+            if et != int(omni.usd.StageEventType.OPENED):
+                return
+            try:
+                url = omni.usd.get_context().get_stage_url() or ""
+                url = os.path.normcase(os.path.abspath(url))
+                if url != pending:
+                    return
+            except Exception:
+                pass
+            opened.set()
+
         self._stage_sub = None
         try:
             self._stage_sub = (
                 omni.usd.get_context()
                 .get_stage_event_stream()
-                .create_subscription_to_pop(
-                    self._on_stage_event, name="mos_app_load"
-                )
+                .create_subscription_to_pop(_on_event, name="mos_app_load")
             )
         except Exception as exc:
             omni.log.error(f"[{_EXT_ID}] Stage subscribe failed: {exc}")
@@ -1021,56 +1106,44 @@ class MosAppExtension(omni.ext.IExt):
 
         try:
             _unload_stage()
-            omni.usd.get_context().open_stage(path)
+            omni.usd.get_context().open_stage(open_path)
         except Exception as exc:
             self._stage_sub = None
             self._pending_abs_path = None
             self._show_error(f"open_stage failed:\n{exc}")
-
-    def _on_stage_event(self, event) -> None:
-        pending = self._pending_abs_path
-        if pending is None:
             return
 
-        et     = event.type
-        opened = int(omni.usd.StageEventType.OPENED)
-        failed = int(getattr(omni.usd.StageEventType, "OPEN_FAILED", -1))
+        # Wait for OPENED / failure (with timeout).
+        for _ in range(6000):  # ~100 s at 60 Hz
+            if opened.is_set() or failed.is_set():
+                break
+            await omni.kit.app.get_app().next_update_async()
 
-        if et == failed:
-            self._stage_sub = None
-            self._pending_abs_path = None
-            self._show_error("Stage open failed.")
+        self._stage_sub = None
+        self._pending_abs_path = None
+        if failed.is_set() or not opened.is_set():
+            self._show_error("Stage open failed or timed out.")
             self._state = _St.NAVIGATING
             return
 
-        if et != opened:
-            return
+        self._post_load(orient_root="/World")
+        omni.log.warn(
+            f"[{_EXT_ID}] Transition (legacy open_stage) "
+            f"{time.perf_counter() - t0:.1f}s open={open_path}"
+        )
 
-        # Verify this is our target stage, not the empty stage from unload.
-        try:
-            url = omni.usd.get_context().get_stage_url() or ""
-            url = os.path.normcase(os.path.abspath(url))
-            if url != pending:
-                return
-        except Exception:
-            pass
-
-        self._stage_sub        = None
-        self._pending_abs_path = None
-        self._post_load()
-
-    def _post_load(self) -> None:
+    def _post_load(self, orient_root: str = "/World") -> None:
         path = self._scenes[self._index]
 
-        # 1. Orientation fix
+        # 1. Orientation fix (slot prim for dual-slot; /World for legacy)
         try:
-            _apply_orientation(_ORIENT_PRESET, _FORCE_Z_UP)
+            _apply_orientation(_ORIENT_PRESET, _FORCE_Z_UP, root_path=orient_root)
         except Exception as exc:
             omni.log.warn(f"[{_EXT_ID}] Orientation failed: {exc}")
 
-        # 2. Camera from cameras.json
+        # 2. Camera from cameras.json (always from original scene path)
         cam_json = _resolve_cameras_json(path)
-        cam_tag  = "no cameras.json"
+        cam_tag = "no cameras.json"
         if cam_json:
             cam0 = _load_camera0(cam_json)
             if cam0 and _apply_camera_from_json(cam0, _ORIENT_PRESET):
@@ -1082,8 +1155,8 @@ class MosAppExtension(omni.ext.IExt):
         self._capture_initial_camera()
 
         # 4. Update UI
-        n    = len(self._scenes)
-        idx  = self._index
+        n = len(self._scenes)
+        idx = self._index
         fname = os.path.basename(path)
         self._set_status(
             f"Scene {idx + 1}/{n}: {fname}  |  {cam_tag}"
@@ -1093,6 +1166,21 @@ class MosAppExtension(omni.ext.IExt):
 
         self._state = _St.NAVIGATING
         omni.log.info(f"[{_EXT_ID}] Post-load done — {fname}")
+
+        # Prefetch / GPU-warm the next scene while the participant navigates.
+        self._schedule_next_preload()
+
+    def _schedule_next_preload(self) -> None:
+        next_idx = self._index + 1
+        if next_idx >= len(self._scenes):
+            self._slots.cancel()
+            self._preloader.cancel()
+            return
+        next_path = self._scenes[next_idx]
+        # Disk warm always (cheap). GPU standby when dual-slot mode is on.
+        self._preloader.schedule(next_path)
+        if gpu_resident_enabled() and self._slots.bootstrapped:
+            self._slots.schedule_standby(next_path)
 
     # ── Camera capture & reset ─────────────────────────────────────────────────
 

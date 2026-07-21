@@ -87,6 +87,14 @@ scene.lights.visible = false
 # Path to the JSON file that lists .usdz scenes to evaluate.
 # ${app} resolves to the apps/ folder inside the build tree.
 sceneListPath = "${app}/../data/mos_scenes.json"
+# Prefetch next USDZ (disk) + GPU-resident dual-slot standby (see reports/).
+# mode=disk alone does NOT cut the ~20s gap (GPU/USD dominate).
+preload.enabled = true
+preload.mode = "gpu_resident"
+preload.lookahead = 1
+preload.startDelaySec = 2.0
+preload.localCacheDir = "/tmp/mos_usdz_cache"
+preload.showStatus = false
 
 [settings.app.file]
 ignoreUnsavedOnExit = true  # enable quitting without confirmation
