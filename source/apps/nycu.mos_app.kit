@@ -95,6 +95,12 @@ preload.lookahead = 1
 preload.startDelaySec = 2.0
 preload.localCacheDir = "/tmp/mos_usdz_cache"
 preload.showStatus = false
+# Non-interactive performance benchmark; disabled for normal experiments.
+benchmark.enabled = false
+benchmark.participant = "benchmark"
+benchmark.advanceDelaySec = 0.25
+benchmark.standbyTimeoutSec = 180.0
+benchmark.exitOnComplete = true
 
 [settings.app.file]
 ignoreUnsavedOnExit = true  # enable quitting without confirmation

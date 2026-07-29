@@ -22,6 +22,12 @@ preload.startDelaySec = 2.0
 # Empty string = page-cache warm only (no local copy).
 preload.localCacheDir = "/tmp/mos_usdz_cache"
 preload.showStatus = false
+# Disabled by default; enable with /exts/nycu.mos_app_extension/benchmark/enabled=true.
+benchmark.enabled = false
+benchmark.participant = "benchmark"
+benchmark.advanceDelaySec = 0.25
+benchmark.standbyTimeoutSec = 180.0
+benchmark.exitOnComplete = true
 
 [[python.module]]
 name = "nycu.mos_app_extension"

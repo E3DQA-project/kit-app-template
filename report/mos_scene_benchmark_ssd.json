@@ -1,0 +1,79 @@
+[
+  {
+    "disk_status_at_start": "idle",
+    "gpu_standby_ready_at_start": false,
+    "mode": "dual_slot_load",
+    "scene_index": 0,
+    "scene_name": "generated_3dgs_opt.usdz",
+    "scene_path": "/mnt/gen5_SSD/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt.usdz",
+    "transition_sec": 29.883654,
+    "disk_preload_sec": null,
+    "gpu_standby_sec": null
+  },
+  {
+    "disk_status_at_start": "ready",
+    "gpu_standby_ready_at_start": true,
+    "mode": "gpu_swap",
+    "scene_index": 1,
+    "scene_name": "generated_3dgs_opt_downsample_p0.25.usdz",
+    "scene_path": "/mnt/gen5_SSD/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.25.usdz",
+    "transition_sec": 0.007646,
+    "disk_preload_sec": 0.5,
+    "gpu_standby_sec": 4.2
+  },
+  {
+    "disk_status_at_start": "ready",
+    "gpu_standby_ready_at_start": true,
+    "mode": "gpu_swap",
+    "scene_index": 2,
+    "scene_name": "generated_3dgs_opt_downsample_p0.50.usdz",
+    "scene_path": "/mnt/gen5_SSD/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.50.usdz",
+    "transition_sec": 0.00341,
+    "disk_preload_sec": 0.7,
+    "gpu_standby_sec": 0.3
+  },
+  {
+    "disk_status_at_start": "ready",
+    "gpu_standby_ready_at_start": true,
+    "mode": "gpu_swap",
+    "scene_index": 3,
+    "scene_name": "generated_3dgs_opt_downsample_p0.75.usdz",
+    "scene_path": "/mnt/gen5_SSD/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.75.usdz",
+    "transition_sec": 0.003105,
+    "disk_preload_sec": 1.0,
+    "gpu_standby_sec": 0.3
+  },
+  {
+    "disk_status_at_start": "ready",
+    "gpu_standby_ready_at_start": true,
+    "mode": "gpu_swap",
+    "scene_index": 4,
+    "scene_name": "generated_3dgs_opt_spatial_noise_s0.0010.usdz",
+    "scene_path": "/mnt/gen5_SSD/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_spatial_noise_s0.0010.usdz",
+    "transition_sec": 0.003387,
+    "disk_preload_sec": 1.3,
+    "gpu_standby_sec": 0.3
+  },
+  {
+    "disk_status_at_start": "ready",
+    "gpu_standby_ready_at_start": true,
+    "mode": "gpu_swap",
+    "scene_index": 5,
+    "scene_name": "generated_3dgs_opt_spatial_noise_s0.0050.usdz",
+    "scene_path": "/mnt/gen5_SSD/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_spatial_noise_s0.0050.usdz",
+    "transition_sec": 0.004851,
+    "disk_preload_sec": 8.6,
+    "gpu_standby_sec": 0.3
+  },
+  {
+    "disk_status_at_start": "ready",
+    "gpu_standby_ready_at_start": true,
+    "mode": "gpu_swap",
+    "scene_index": 6,
+    "scene_name": "generated_3dgs_opt_spatial_noise_s0.0100.usdz",
+    "scene_path": "/mnt/gen5_SSD/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_spatial_noise_s0.0100.usdz",
+    "transition_sec": 0.003128,
+    "disk_preload_sec": 1.2,
+    "gpu_standby_sec": 0.3
+  }
+]

@@ -22,6 +22,7 @@ import asyncio
 import gc
 import json
 import os
+import sys
 import time
 from datetime import datetime, timezone
 from math import sqrt
@@ -38,6 +39,7 @@ import omni.log
 import omni.ui as ui
 import omni.usd
 
+from .benchmark import BenchmarkSettings
 from .scene_preload import DiskPreloader, DualSlotController, gpu_resident_enabled
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -535,6 +537,13 @@ class MosAppExtension(omni.ext.IExt):
     def on_startup(self, _ext_id: str) -> None:
         self._state: str = _St.PROMPT
         self._participant: str = ""
+        self._benchmark = self._read_benchmark_settings()
+        self._benchmark_records: List[Dict[str, Any]] = []
+        self._benchmark_task = None
+        self._benchmark_t0: Optional[float] = None
+        self._benchmark_mode: str = "unknown"
+        self._benchmark_disk_status: str = "idle"
+        self._benchmark_gpu_ready: bool = False
         self._scenes: List[str] = []
         self._index: int = 0
         self._initial_cam_xform = None  # GfMatrix4d of /BrowserCamera after load
@@ -576,6 +585,9 @@ class MosAppExtension(omni.ext.IExt):
 
     def on_shutdown(self) -> None:
         self._unregister_keyboard()
+        if self._benchmark_task is not None and not self._benchmark_task.done():
+            self._benchmark_task.cancel()
+        self._benchmark_task = None
         self._stage_sub = None
         try:
             self._slots.shutdown()
@@ -596,6 +608,37 @@ class MosAppExtension(omni.ext.IExt):
         self._score_value_labels = {}
         self._scene_info_lbl = None
         self._scoring_hint_lbl = None
+
+    def _read_benchmark_settings(self) -> BenchmarkSettings:
+        values: Dict[str, object] = {}
+        root = f"/exts/{_EXT_ID}/benchmark"
+        settings = carb.settings.get_settings()
+        for key in ("enabled", "participant", "advanceDelaySec", "standbyTimeoutSec", "exitOnComplete"):
+            try:
+                if key == "participant":
+                    values[key] = settings.get_as_string(f"{root}/{key}")
+                else:
+                    values[key] = settings.get(f"{root}/{key}")
+            except Exception:
+                pass
+
+        # Kit applies some app-file settings after extension startup. Re-read
+        # explicit benchmark CLI overrides so headless runs are deterministic.
+        prefix = f"--{root}/"
+        for argument in sys.argv:
+            if not argument.startswith(prefix) or "=" not in argument:
+                continue
+            key, value = argument[len(prefix):].split("=", 1)
+            if key in ("enabled", "participant", "advanceDelaySec", "standbyTimeoutSec", "exitOnComplete"):
+                values[key] = value.strip('"')
+
+        benchmark = BenchmarkSettings.from_values(values)
+        omni.log.info(
+            f"[{_EXT_ID}] Benchmark settings: enabled={benchmark.enabled}, "
+            f"participant={benchmark.participant!r}, advanceDelaySec={benchmark.advance_delay_sec}, "
+            f"standbyTimeoutSec={benchmark.standby_timeout_sec}, exitOnComplete={benchmark.exit_on_complete}"
+        )
+        return benchmark
 
     # ── Nav defaults ───────────────────────────────────────────────────────────
 
@@ -712,6 +755,14 @@ class MosAppExtension(omni.ext.IExt):
         app = omni.kit.app.get_app()
         for _ in range(8):
             await app.next_update_async()
+        if self._benchmark.enabled:
+            self._participant = self._benchmark.participant
+            omni.log.info(
+                f"[{_EXT_ID}] Benchmark mode enabled for {self._participant!r}; "
+                "starting without participant/scoring UI."
+            )
+            asyncio.ensure_future(self._start_evaluation())
+            return
         omni.log.info(f"[{_EXT_ID}] Showing participant prompt.")
         self._build_prompt_win()
 
@@ -803,9 +854,12 @@ class MosAppExtension(omni.ext.IExt):
             return
 
         total_in_list = len(self._scenes)
-        self._scenes, skipped = _filter_unscored_scenes(
-            self._scenes, self._participant
-        )
+        if self._benchmark.enabled:
+            skipped = 0
+        else:
+            self._scenes, skipped = _filter_unscored_scenes(
+                self._scenes, self._participant
+            )
         if skipped:
             omni.log.info(
                 f"[{_EXT_ID}] Skipping {skipped}/{total_in_list} already-scored "
@@ -833,9 +887,10 @@ class MosAppExtension(omni.ext.IExt):
             f"({skipped} skipped) from {scene_list_path}"
         )
 
-        # Build persistent UI
-        self._build_status_win()
-        self._build_scoring_win()
+        # Build persistent UI only for the interactive experiment.
+        if not self._benchmark.enabled:
+            self._build_status_win()
+            self._build_scoring_win()
 
         # Start with first scene
         self._index = 0
@@ -1026,9 +1081,15 @@ class MosAppExtension(omni.ext.IExt):
         self._state = _St.LOADING
         self._initial_cam_xform = None
         t0 = time.perf_counter()
+        if self._benchmark.enabled:
+            self._benchmark_t0 = t0
+            self._benchmark_mode = "unknown"
+            self._benchmark_disk_status = disk_status
+            self._benchmark_gpu_ready = gpu_ready
 
         # ── Fast path: GPU-resident standby already composed ─────────────────
         if gpu_resident_enabled() and self._slots.activate_standby(path):
+            self._benchmark_mode = "gpu_swap"
             self._post_load(orient_root=self._slots.active_slot_path())
             omni.log.warn(
                 f"[{_EXT_ID}] Transition (GPU swap) "
@@ -1048,6 +1109,7 @@ class MosAppExtension(omni.ext.IExt):
             except Exception as exc:
                 ok, err = False, str(exc)
             if ok:
+                self._benchmark_mode = "dual_slot_load"
                 self._post_load(orient_root=self._slots.active_slot_path())
                 omni.log.warn(
                     f"[{_EXT_ID}] Transition (dual-slot load) "
@@ -1126,6 +1188,7 @@ class MosAppExtension(omni.ext.IExt):
             self._state = _St.NAVIGATING
             return
 
+        self._benchmark_mode = "legacy_open_stage"
         self._post_load(orient_root="/World")
         omni.log.warn(
             f"[{_EXT_ID}] Transition (legacy open_stage) "
@@ -1169,6 +1232,8 @@ class MosAppExtension(omni.ext.IExt):
 
         # Prefetch / GPU-warm the next scene while the participant navigates.
         self._schedule_next_preload()
+        if self._benchmark.enabled:
+            self._benchmark_complete_transition()
 
     def _schedule_next_preload(self) -> None:
         next_idx = self._index + 1
@@ -1181,6 +1246,90 @@ class MosAppExtension(omni.ext.IExt):
         self._preloader.schedule(next_path)
         if gpu_resident_enabled() and self._slots.bootstrapped:
             self._slots.schedule_standby(next_path)
+
+    def _benchmark_complete_transition(self) -> None:
+        if self._benchmark_t0 is None:
+            return
+        elapsed = time.perf_counter() - self._benchmark_t0
+        path = self._scenes[self._index]
+        record = {
+            "scene_index": self._index,
+            "scene_path": path,
+            "scene_name": os.path.basename(path),
+            "mode": self._benchmark_mode,
+            "disk_status_at_start": self._benchmark_disk_status,
+            "gpu_standby_ready_at_start": self._benchmark_gpu_ready,
+            "transition_sec": round(elapsed, 6),
+        }
+        self._benchmark_records.append(record)
+        omni.log.warn(f"[{_EXT_ID}] BENCHMARK transition {json.dumps(record, sort_keys=True)}")
+        self._benchmark_t0 = None
+        if self._index < len(self._scenes) - 1:
+            self._benchmark_task = asyncio.ensure_future(self._benchmark_advance())
+        else:
+            self._benchmark_task = asyncio.ensure_future(self._benchmark_finish())
+
+    async def _benchmark_advance(self) -> None:
+        try:
+            await asyncio.sleep(self._benchmark.advance_delay_sec)
+            next_path = self._scenes[self._index + 1]
+            deadline = time.perf_counter() + self._benchmark.standby_timeout_sec
+            while gpu_resident_enabled() and not self._slots.standby_ready_for(next_path):
+                if time.perf_counter() >= deadline:
+                    omni.log.warn(
+                        f"[{_EXT_ID}] BENCHMARK standby timeout for {os.path.basename(next_path)}"
+                    )
+                    break
+                await omni.kit.app.get_app().next_update_async()
+            self._index += 1
+            self._load_scene()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            omni.log.error(f"[{_EXT_ID}] BENCHMARK advance failed: {exc}")
+
+    async def _benchmark_finish(self) -> None:
+        await omni.kit.app.get_app().next_update_async()
+        report_dir = None
+        for parent in Path(__file__).resolve().parents:
+            if (parent / "source" / "data" / "mos_scenes.json").is_file():
+                report_dir = str(parent / "report")
+                break
+        if report_dir is None:
+            report_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "report")
+            )
+        try:
+            os.makedirs(report_dir, exist_ok=True)
+            json_path = os.path.join(report_dir, "mos_scene_benchmark.json")
+            md_path = os.path.join(report_dir, "mos_scene_benchmark.md")
+            with open(json_path, "w", encoding="utf-8") as fh:
+                json.dump(self._benchmark_records, fh, indent=2)
+            lines = [
+                "# MOS Scene Loading Benchmark",
+                "",
+                f"Participant label: `{self._participant}`",
+                f"Scenes measured: {len(self._benchmark_records)}",
+                "",
+                "| # | Scene | Mode | Disk at start | GPU standby | Transition (s) |",
+                "|---:|---|---|---|---|---:|",
+            ]
+            for r in self._benchmark_records:
+                lines.append(
+                    f"| {r['scene_index'] + 1} | `{r['scene_name']}` | {r['mode']} | "
+                    f"{r['disk_status_at_start']} | {r['gpu_standby_ready_at_start']} | "
+                    f"{r['transition_sec']:.3f} |"
+                )
+            with open(md_path, "w", encoding="utf-8") as fh:
+                fh.write("\n".join(lines) + "\n")
+            omni.log.warn(f"[{_EXT_ID}] BENCHMARK report written: {md_path}")
+        except Exception as exc:
+            omni.log.error(f"[{_EXT_ID}] BENCHMARK report failed: {exc}")
+        if self._benchmark.exit_on_complete:
+            app = omni.kit.app.get_app()
+            quit_fn = getattr(app, "post_quit", None)
+            if callable(quit_fn):
+                quit_fn()
 
     # ── Camera capture & reset ─────────────────────────────────────────────────
 
