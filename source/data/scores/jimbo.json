@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "participant": "jimbo",
+  "sessions": [
+    {
+      "saved_at": "2026-07-16T12:28:55.883670+00:00",
+      "scene_path": "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt.usdz",
+      "scene_index": 0,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
+    },
+    {
+      "saved_at": "2026-07-16T12:29:53.037535+00:00",
+      "scene_path": "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.25.usdz",
+      "scene_index": 1,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
+    },
+    {
+      "saved_at": "2026-07-16T12:30:32.087344+00:00",
+      "scene_path": "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.50.usdz",
+      "scene_index": 2,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
+    },
+    {
+      "saved_at": "2026-07-16T12:31:08.278914+00:00",
+      "scene_path": "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.75.usdz",
+      "scene_index": 3,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
+    },
+    {
+      "saved_at": "2026-07-16T12:33:48.888988+00:00",
+      "scene_path": "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_spatial_noise_s0.0010.usdz",
+      "scene_index": 0,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
+    }
+  ]
+}
