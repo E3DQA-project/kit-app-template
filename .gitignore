@@ -39,3 +39,6 @@ deps/**/user.toml
 
 # claude code configs
 .claude/**
+
+# Score files
+**/data/scores/
