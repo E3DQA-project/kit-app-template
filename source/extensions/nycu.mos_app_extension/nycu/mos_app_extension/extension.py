@@ -37,6 +37,14 @@ import omni.log
 import omni.ui as ui
 import omni.usd
 
+from .load_diagnostics import (
+    _DeferredGenerationGate,
+    _FrameStabilityGate,
+    _LoadDiagnostics,
+    _ReadinessGate,
+    _RendererPhaseGate,
+)
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 _EXT_ID = "nycu.mos_app_extension"
@@ -77,6 +85,14 @@ _STATUS_HPAD      = 24
 _STATUS_MIN_WIDTH = 280
 _STATUS_MAX_WIDTH = 960
 _STATUS_HEIGHT    = 36
+
+# Diagnostic-only viewport sampling.  This estimates when the displayed image
+# stops changing; it does not prove that the new scene is the image on screen.
+_STABILITY_CAPTURE_COUNT = 4
+_STABILITY_CAPTURE_GAP_UPDATES = 15
+_STABILITY_REQUIRED_CONSECUTIVE = 2
+_STABILITY_MAX_MEAN_DELTA = 3
+_STABILITY_SIGNATURE_SAMPLES = 2048
 
 # Participant prompt dialog.
 _PROMPT_WIN_WIDTH  = 560
@@ -539,6 +555,24 @@ class MosAppExtension(omni.ext.IExt):
 
         self._stage_sub = None
         self._pending_abs_path: Optional[str] = None
+        self._render_sub = None
+        self._renderer_subs: List[Any] = []
+        self._load_generation = 0
+        self._load_diag: Optional[_LoadDiagnostics] = None
+        self._readiness_gate: Optional[_ReadinessGate] = None
+        self._renderer_phase_gate: Optional[_RendererPhaseGate] = None
+        self._user_action_gate: Optional[_ReadinessGate] = None
+        self._frame_stability_gate: Optional[_FrameStabilityGate] = None
+        self._stability_start_gate = _DeferredGenerationGate()
+        self._stability_start_sub = (
+            omni.kit.app.get_app().get_update_event_stream().create_subscription_to_pop(
+                self._on_stability_start_update, name="mos_app_stability_start"
+            )
+        )
+        self._capture_task: Optional[asyncio.Task] = None
+        self._capture_baseline: Optional[Tuple[int, ...]] = None
+        self._capture_previous: Optional[Tuple[int, ...]] = None
+        self._capture_sample_count = 0
 
         # UI
         self._prompt_win: Optional[ui.Window] = None
@@ -557,6 +591,8 @@ class MosAppExtension(omni.ext.IExt):
         self._carb_input = None
         self._kbd_device = None
         self._kbd_sub = None
+        self._mouse_device = None
+        self._mouse_sub = None
         self._register_keyboard()
 
         # Camera / nav defaults
@@ -568,6 +604,18 @@ class MosAppExtension(omni.ext.IExt):
     def on_shutdown(self) -> None:
         self._unregister_keyboard()
         self._stage_sub = None
+        self._render_sub = None
+        self._renderer_subs = []
+        self._load_diag = None
+        self._readiness_gate = None
+        self._renderer_phase_gate = None
+        self._user_action_gate = None
+        self._frame_stability_gate = None
+        self._stability_start_sub = None
+        self._capture_task = None
+        self._stability_start_gate.clear()
+        self._capture_baseline = None
+        self._capture_previous = None
         self._prompt_win = None
         self._status_win = None
         self._scoring_win = None
@@ -625,7 +673,11 @@ class MosAppExtension(omni.ext.IExt):
             self._kbd_sub = self._carb_input.subscribe_to_keyboard_events(
                 self._kbd_device, self._on_key
             )
-            omni.log.info(f"[{_EXT_ID}] Keyboard subscribed.")
+            self._mouse_device = app_window.get_mouse()
+            self._mouse_sub = self._carb_input.subscribe_to_mouse_events(
+                self._mouse_device, self._on_mouse
+            )
+            omni.log.info(f"[{_EXT_ID}] Keyboard and mouse subscribed.")
         except Exception as exc:
             omni.log.warn(
                 f"[{_EXT_ID}] Keyboard subscribe failed: {exc} "
@@ -648,8 +700,12 @@ class MosAppExtension(omni.ext.IExt):
                 self._kbd_sub = self._carb_input.subscribe_to_keyboard_events(
                     self._kbd_device, self._on_key
                 )
+                self._mouse_device = app_window.get_mouse()
+                self._mouse_sub = self._carb_input.subscribe_to_mouse_events(
+                    self._mouse_device, self._on_mouse
+                )
                 omni.log.info(
-                    f"[{_EXT_ID}] Keyboard subscribed (attempt {attempt + 1})."
+                    f"[{_EXT_ID}] Keyboard and mouse subscribed (attempt {attempt + 1})."
                 )
                 return
             except Exception:
@@ -664,9 +720,40 @@ class MosAppExtension(omni.ext.IExt):
                 )
         except Exception:
             pass
+        try:
+            if self._carb_input and self._mouse_device and self._mouse_sub is not None:
+                self._carb_input.unsubscribe_to_mouse_events(
+                    self._mouse_device, self._mouse_sub
+                )
+        except Exception:
+            pass
         self._kbd_sub = None
         self._kbd_device = None
+        self._mouse_sub = None
+        self._mouse_device = None
         self._carb_input = None
+
+    def _record_first_user_action(self, source: str, action: str) -> None:
+        gate = self._user_action_gate
+        generation = self._load_generation
+        if self._state != _St.NAVIGATING or gate is None or not gate.consume(generation):
+            return
+        self._record_load_event(
+            generation, "FIRST_USER_ACTION", signal="carb_input", source=source, action=action
+        )
+
+    def _on_mouse(self, event, *_args) -> bool:
+        if self._state != _St.NAVIGATING:
+            return False
+        meaningful = (
+            carb.input.MouseEventType.LEFT_BUTTON_DOWN,
+            carb.input.MouseEventType.RIGHT_BUTTON_DOWN,
+            carb.input.MouseEventType.MIDDLE_BUTTON_DOWN,
+            carb.input.MouseEventType.SCROLL,
+        )
+        if event.type in meaningful:
+            self._record_first_user_action("mouse", str(event.type))
+        return False
 
     def _on_key(self, event, *_args) -> bool:
         if event.type != carb.input.KeyboardEventType.KEY_PRESS:
@@ -675,6 +762,7 @@ class MosAppExtension(omni.ext.IExt):
         KI  = carb.input.KeyboardInput
 
         if self._state == _St.NAVIGATING:
+            self._record_first_user_action("keyboard", str(key))
             if key == KI.R:
                 self._reset_camera()
                 return True
@@ -989,9 +1077,240 @@ class MosAppExtension(omni.ext.IExt):
 
     # ── Scene loading ──────────────────────────────────────────────────────────
 
+    def _record_load_event(self, generation: int, event: str, **fields: Any) -> None:
+        if generation != self._load_generation or self._load_diag is None:
+            return
+        self._load_diag.record(event, **fields)
+
+    def _clear_load_subscriptions(self) -> None:
+        self._stage_sub = None
+        self._render_sub = None
+        self._renderer_subs = []
+        if self._capture_task is not None:
+            self._capture_task.cancel()
+        self._capture_task = None
+        self._stability_start_gate.clear()
+        self._capture_baseline = None
+        self._capture_previous = None
+        self._capture_sample_count = 0
+
+    def _schedule_renderer_checks(self, generation: int) -> None:
+        """Record the first valid renderer lifecycle event for this scene."""
+        try:
+            import omni.appwindow
+            import carb.eventdispatcher
+            from omni.kit.renderer import bind as renderer_bind
+
+            app_window = omni.appwindow.get_default_app_window()
+            dispatcher = carb.eventdispatcher.get_eventdispatcher()
+            phases = (
+                ("FIRST_RENDER_COMMAND", renderer_bind.RendererEventType.PRE_BEGIN_FRAME),
+                ("FIRST_DISPLAYABLE_RENDER_FRAME", renderer_bind.RendererEventType.RENDER_FRAME),
+                ("FIRST_PRESENT_TO_VIEWPORT", renderer_bind.RendererEventType.PRESENT_RENDER_FRAME),
+                ("POST_PRESENT_FRAME_BUFFER", renderer_bind.RendererEventType.POST_PRESENT_FRAME_BUFFER),
+            )
+            self._renderer_subs = [
+                dispatcher.observe_event(
+                    observer_name=f"mos_app_{phase.lower()}",
+                    event_name=renderer_bind.get_renderer_event_name(event_type, app_window),
+                    order=0,
+                    on_event=lambda event, phase=phase: self._on_renderer_event(event, generation, phase),
+                )
+                for phase, event_type in phases
+            ]
+        except Exception as exc:
+            self._renderer_subs = []
+            self._record_load_event(
+                generation, "RENDERER_EVENTS_UNAVAILABLE", error=type(exc).__name__)
+
+    @staticmethod
+    def _renderer_event_value(event: Any, key: str, default: Any) -> Any:
+        try:
+            return event.get(key) if key in event else default
+        except Exception:
+            return default
+
+    def _on_renderer_event(self, event: Any, generation: int, phase: str) -> None:
+        gate = self._renderer_phase_gate
+        if generation != self._load_generation or gate is None:
+            return
+        save_draw_data = bool(self._renderer_event_value(event, "saveDrawData", False))
+        draw_frozen = bool(self._renderer_event_value(event, "draw_frozen", False))
+        if save_draw_data or draw_frozen:
+            return
+        if not gate.consume(generation, phase):
+            return
+        self._record_load_event(
+            generation, phase, signal="renderer_event", save_draw_data=save_draw_data,
+            draw_frozen=draw_frozen)
+        if phase == "POST_PRESENT_FRAME_BUFFER":
+            self._begin_stability_sampling(generation)
+        if gate.complete:
+            self._renderer_subs = []
+
+    @staticmethod
+    def _frame_signature(values: List[int]) -> Tuple[int, ...]:
+        if not values:
+            return ()
+        step = max(1, len(values) // _STABILITY_SIGNATURE_SAMPLES)
+        return tuple(values[::step][:_STABILITY_SIGNATURE_SAMPLES])
+
+    @staticmethod
+    def _mean_frame_delta(left: Tuple[int, ...], right: Tuple[int, ...]) -> int:
+        if not left or not right or len(left) != len(right):
+            return 255
+        return round(sum(abs(a - b) for a, b in zip(left, right)) / len(left))
+
+    def _request_viewport_capture(self, generation: int, kind: str) -> None:
+        try:
+            import omni.appwindow
+            import omni.kit.renderer_capture
+
+            app_window = omni.appwindow.get_default_app_window()
+            capture = omni.kit.renderer_capture.acquire_renderer_capture_interface()
+            if app_window is None or capture is None:
+                raise RuntimeError("capture window/interface unavailable")
+            capture.capture_next_frame_swapchain_callback(
+                lambda buf, size, width, height, fmt: self._on_viewport_capture(
+                    buf, size, width, height, fmt, generation, kind
+                ),
+                app_window,
+            )
+            self._record_load_event(generation, "VIEWPORT_CAPTURE_REQUESTED", kind=kind)
+        except Exception as exc:
+            self._record_load_event(
+                generation, "VIEWPORT_CAPTURE_UNAVAILABLE", error=type(exc).__name__
+            )
+
+    def _schedule_baseline_capture(self, generation: int) -> None:
+        self._request_viewport_capture(generation, "baseline")
+
+    def _begin_stability_sampling(self, generation: int) -> None:
+        if generation != self._load_generation or self._capture_task is not None:
+            return
+        # Renderer events arrive on a renderer-owned thread. Queue the work for
+        # the permanent Kit update subscription, where asyncio is available.
+        self._stability_start_gate.schedule(generation)
+        self._record_load_event(generation, "STABILITY_SAMPLING_QUEUED", signal="kit_update")
+
+    def _on_stability_start_update(self, _event: Any) -> None:
+        generation = self._load_generation
+        if not self._stability_start_gate.consume(generation) or self._capture_task is not None:
+            return
+        self._frame_stability_gate = _FrameStabilityGate(
+            generation, _STABILITY_REQUIRED_CONSECUTIVE, _STABILITY_MAX_MEAN_DELTA
+        )
+        self._capture_task = asyncio.ensure_future(
+            self._capture_viewport_samples(generation)
+        )
+
+    async def _capture_viewport_samples(self, generation: int) -> None:
+        app = omni.kit.app.get_app()
+        try:
+            for _ in range(_STABILITY_CAPTURE_COUNT):
+                if generation != self._load_generation:
+                    return
+                for _ in range(_STABILITY_CAPTURE_GAP_UPDATES):
+                    await app.next_update_async()
+                self._request_viewport_capture(generation, "sample")
+        except asyncio.CancelledError:
+            return
+        finally:
+            if generation == self._load_generation:
+                self._capture_task = None
+
+    def _on_viewport_capture(
+        self, buffer: Any, buffer_size: int, width: int, height: int, fmt: Any,
+        generation: int, kind: str
+    ) -> None:
+        if generation != self._load_generation:
+            return
+        try:
+            import omni.kit.renderer_capture
+            values = omni.kit.renderer_capture.convert_raw_bytes_to_list(
+                buffer, buffer_size, width, height, fmt
+            )
+            signature = self._frame_signature(values)
+        except Exception as exc:
+            self._record_load_event(
+                generation, "VIEWPORT_CAPTURE_FAILED", error=type(exc).__name__
+            )
+            return
+        if kind == "baseline":
+            self._capture_baseline = signature
+            self._record_load_event(
+                generation, "VIEWPORT_BASELINE_CAPTURED", width=width, height=height
+            )
+            return
+        self._capture_sample_count += 1
+        previous = self._capture_previous
+        self._capture_previous = signature
+        if previous is None:
+            self._record_load_event(
+                generation, "CAPTURED_VIEWPORT_FRAME", signal="swapchain_capture",
+                width=width, height=height
+            )
+            self._record_load_event(
+                generation, "VIEWPORT_SAMPLE", sample=self._capture_sample_count,
+                width=width, height=height, mean_delta="n/a"
+            )
+            return
+        delta = self._mean_frame_delta(previous, signature)
+        self._record_load_event(
+            generation, "VIEWPORT_SAMPLE", sample=self._capture_sample_count,
+            width=width, height=height, mean_delta=delta
+        )
+        gate = self._frame_stability_gate
+        if gate is not None and gate.consume(generation, delta):
+            baseline_delta = self._mean_frame_delta(self._capture_baseline or (), signature)
+            self._record_load_event(
+                generation, "RENDER_STABLE", signal="swapchain_capture",
+                mean_delta=delta, baseline_delta=baseline_delta
+            )
+
+    def _schedule_post_load_update(self, generation: int) -> None:
+        try:
+            self._render_sub = (
+                omni.kit.app.get_app()
+                .get_update_event_stream()
+                .create_subscription_to_pop(
+                    lambda event: self._on_first_post_load_update(event, generation),
+                    name="mos_app_post_load_update",
+                )
+            )
+        except Exception as exc:
+            self._record_load_event(
+                generation, "FIRST_POST_LOAD_UPDATE_UNAVAILABLE", error=type(exc).__name__)
+
+    def _on_first_post_load_update(self, _event: Any, generation: int) -> None:
+        gate = self._readiness_gate
+        if generation != self._load_generation or gate is None or not gate.consume(generation):
+            return
+        self._record_load_event(generation, "FIRST_POST_LOAD_UPDATE", signal="kit_update")
+        self._render_sub = None
+
     def _load_scene(self) -> None:
         path = self._scenes[self._index]
         n    = len(self._scenes)
+        self._clear_load_subscriptions()
+        self._load_generation += 1
+        generation = self._load_generation
+        self._load_diag = _LoadDiagnostics(
+            self._index + 1, n, path, generation=generation)
+        self._load_diag.begin()
+        self._readiness_gate = _ReadinessGate(generation)
+        self._user_action_gate = _ReadinessGate(generation)
+        self._frame_stability_gate = None
+        self._renderer_phase_gate = _RendererPhaseGate(
+            generation,
+            (
+                "FIRST_RENDER_COMMAND",
+                "FIRST_DISPLAYABLE_RENDER_FRAME",
+                "FIRST_PRESENT_TO_VIEWPORT",
+                "POST_PRESENT_FRAME_BUFFER",
+            ),
+        )
+        self._record_load_event(generation, "BEGIN")
         omni.log.warn(
             f"[{_EXT_ID}] Loading {self._index + 1}/{n}: {path}"
         )
@@ -1005,29 +1324,36 @@ class MosAppExtension(omni.ext.IExt):
         self._pending_abs_path = abs_url
 
         # Subscribe BEFORE opening so we never miss the OPENED event.
-        self._stage_sub = None
         try:
             self._stage_sub = (
                 omni.usd.get_context()
                 .get_stage_event_stream()
                 .create_subscription_to_pop(
-                    self._on_stage_event, name="mos_app_load"
+                    lambda event: self._on_stage_event(event, generation), name="mos_app_load"
                 )
             )
         except Exception as exc:
+            self._record_load_event(
+                generation, "STAGE_SUBSCRIBE_FAILED", error=type(exc).__name__)
             omni.log.error(f"[{_EXT_ID}] Stage subscribe failed: {exc}")
             self._pending_abs_path = None
             return
+
+        self._schedule_baseline_capture(generation)
 
         try:
             _unload_stage()
             omni.usd.get_context().open_stage(path)
         except Exception as exc:
+            self._record_load_event(
+                generation, "STAGE_OPEN_FAILED", error=type(exc).__name__)
             self._stage_sub = None
             self._pending_abs_path = None
             self._show_error(f"open_stage failed:\n{exc}")
 
-    def _on_stage_event(self, event) -> None:
+    def _on_stage_event(self, event, generation: int) -> None:
+        if generation != self._load_generation:
+            return
         pending = self._pending_abs_path
         if pending is None:
             return
@@ -1037,6 +1363,7 @@ class MosAppExtension(omni.ext.IExt):
         failed = int(getattr(omni.usd.StageEventType, "OPEN_FAILED", -1))
 
         if et == failed:
+            self._record_load_event(generation, "STAGE_OPEN_FAILED", error="stage_event")
             self._stage_sub = None
             self._pending_abs_path = None
             self._show_error("Stage open failed.")
@@ -1057,26 +1384,42 @@ class MosAppExtension(omni.ext.IExt):
 
         self._stage_sub        = None
         self._pending_abs_path = None
-        self._post_load()
+        self._record_load_event(generation, "STAGE_OPENED")
+        # Subscribe before camera/UI post-processing so the first render phases
+        # after opening cannot be missed.
+        self._schedule_renderer_checks(generation)
+        self._post_load(generation)
 
-    def _post_load(self) -> None:
+    def _post_load(self, generation: int) -> None:
         path = self._scenes[self._index]
 
         # 1. Orientation fix
+        orientation_ok = True
         try:
             _apply_orientation(_ORIENT_PRESET, _FORCE_Z_UP)
         except Exception as exc:
+            orientation_ok = False
             omni.log.warn(f"[{_EXT_ID}] Orientation failed: {exc}")
+        self._record_load_event(generation, "ORIENTATION_DONE", ok=orientation_ok)
 
         # 2. Camera from cameras.json
         cam_json = _resolve_cameras_json(path)
         cam_tag  = "no cameras.json"
+        camera_ready = False
         if cam_json:
             cam0 = _load_camera0(cam_json)
             if cam0 and _apply_camera_from_json(cam0, _ORIENT_PRESET):
                 cam_tag = f"camera OK ({os.path.basename(cam_json)})"
+                camera_ready = True
             else:
                 cam_tag = "camera FAILED"
+
+        if camera_ready:
+            self._record_load_event(
+                generation, "CAMERA_READY", source=os.path.basename(cam_json))
+        else:
+            reason = "missing_cameras_json" if not cam_json else "camera_setup_failed"
+            self._record_load_event(generation, "CAMERA_FALLBACK", reason=reason)
 
         # 3. Capture initial camera pose for reset
         self._capture_initial_camera()
@@ -1092,6 +1435,8 @@ class MosAppExtension(omni.ext.IExt):
         self._update_scene_info()
 
         self._state = _St.NAVIGATING
+        self._record_load_event(generation, "NAV_READY")
+        self._schedule_post_load_update(generation)
         omni.log.info(f"[{_EXT_ID}] Post-load done — {fname}")
 
     # ── Camera capture & reset ─────────────────────────────────────────────────
@@ -1372,4 +1717,3 @@ class MosAppExtension(omni.ext.IExt):
         except Exception as exc:
             self._show_error(f"Failed to save scores:\n{exc}")
             return False
-
