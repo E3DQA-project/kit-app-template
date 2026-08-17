@@ -64,7 +64,7 @@ That means `VIEWER_STAGE_LOADED - STREAMING_IDLE` should be only a few frames. I
 
 The lifecycle timestamps are now implemented and measured. Keep loading behavior unchanged, but run the same sequence from NAS and local SSD while tracing **`USD_ASSETS_LOADING → USD_ASSETS_LOADED`** with Kit/Tracy CPU+GPU profiling. The current loading-status API produced only a final empty snapshot, so it cannot identify the late asset by itself.
 
-The trace should distinguish asset I/O / USDZ archive work, USD and MDL/material processing, texture work, GPU upload, shader/pipeline work, or another asynchronous dependency.
+The trace should distinguish asset I/O / USDZ archive work, USD and MDL/material processing, texture work, GPU upload, shader/pipeline work, or another asynchronous dependency. The [next-experiment guide](mos-asset-loading-next-experiment.md) turns that into a controlled NAS-versus-SSD baseline followed by an activity/CPU trace, with interpretation criteria.
 
 ## Source locations
 
