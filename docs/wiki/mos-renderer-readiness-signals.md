@@ -93,7 +93,7 @@ This is an approximation. The current MOS diagnostic takes four swapchain sample
 
 In the repaired capture run, `CAPTURED_VIEWPORT_FRAME` appeared at 2.1–7.5 s and `RENDER_STABLE` at 2.4–7.8 s. The viewer's “stage has loaded” completion message appeared 19.8–20.1 seconds later, and the participant pressed `W` another 0.35–0.51 s after that. This proves that swapchain stability is not a usable-scene definition for this application.
 
-The viewer completion implementation waits for `ASSETS_LOADED`, then waits for `omni.streamingstatus:streaming_status` to report `isBusy=false`, plus two Kit updates. Instrument those edges next; they are the first supported application-level checkpoints that match the remaining visible delay.
+The viewer completion implementation waits for `ASSETS_LOADED`, then waits for `omni.streamingstatus:streaming_status` to report `isBusy=false`, plus two Kit updates. The implemented checkpoint run showed that streaming became idle at 1.9–7.2 s but assets were not loaded until 23.1–28.0 s. Therefore the long visible delay is in `USD_ASSETS_LOADING → USD_ASSETS_LOADED`, not the streaming-idle gate. See the [asset-loading checkpoint record](../records/2026-08-17-mos-asset-loading-checkpoints.md).
 
 ## GPU, resource, and renderer profiling
 

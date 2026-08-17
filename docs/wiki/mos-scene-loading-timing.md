@@ -33,7 +33,7 @@ CAPTURED_VIEWPORT_FRAME     A swapchain-capture callback receives viewport pixel
         ↓
 RENDER_STABLE               Several sampled images stop changing
         ↓
-STREAMING_BUSY → IDLE       Kit finishes its remaining stage-streaming work
+USD_ASSETS_LOADING → LOADED Kit finishes late texture/material asset work
         ↓
 VIEWER_STAGE_LOADED         The viewer announces all dependencies are complete
         ↓
@@ -75,20 +75,20 @@ For normal MOS timing, the best automatic **renderer-ready** proxy is a `POST_PR
 
 ## The newly isolated 20-second gap
 
-The second capture experiment changed the diagnosis. `RENDER_STABLE` is not final scene readiness: it arrived at 2.4–7.8 s, while the viewer’s “stage has loaded” message arrived at 22.7–28.0 s and the participant’s first movement followed about 0.3–0.5 s later.
+The checkpoint experiment gives the final diagnosis so far. `RENDER_STABLE` is not final scene readiness: it arrived at 2.4–7.8 s. `STREAMING_IDLE` then arrived at 1.9–7.2 s, but `USD_ASSETS_LOADED` did not arrive until 23.1–28.0 s. The participant's first movement followed viewer completion by about 0.3–0.5 s.
 
 The viewer code waits for Kit’s stage-streaming status to become idle after `ASSETS_LOADED`, then waits two updates before declaring success. So the next bottleneck to split is:
 
 ```text
 RENDER_STABLE
   ↓
-USD_ASSETS_LOADED
+USD_ASSETS_LOADING
   ↓
-STREAMING_BUSY
+USD_ASSETS_LOADED             ← 20.9–27.8 s late-asset phase
   ↓
-STREAMING_IDLE
+STREAMING_GATE_CLEAR
   ↓
-two Kit updates
+two Kit updates (~16–18 ms)
   ↓
 VIEWER_STAGE_LOADED
 ```
@@ -132,7 +132,7 @@ The next timestamps will split that work into `UNLOAD_BEGIN`, `CLOSE_STAGE_DONE`
 | `FIRST_POST_LOAD_UPDATE → FIRST_PRESENT_TO_VIEWPORT` | Getting actual rendering started and routed to the viewport. | GPU assignment, renderer/Hydra startup, resource upload. |
 | `FIRST_PRESENT_TO_VIEWPORT → CAPTURED_VIEWPORT_FRAME` | Producing an accessible rendered buffer. | Renderer/presentation backlog. |
 | `CAPTURED_VIEWPORT_FRAME → RENDER_STABLE` | The captured window image stops changing. | Useful diagnostic, but may still be a stable incomplete/stale image. |
-| `RENDER_STABLE → STREAMING_IDLE` | Kit's remaining stage streaming. | Asset-streaming state, GPU uploads/residency, 3DGS/geometry, texture work, and storage. |
+| `USD_ASSETS_LOADING → USD_ASSETS_LOADED` | Late USD texture/material asset completion. | NAS versus SSD, USDZ archive access, MDL/material processing, texture work, and GPU upload. |
 | `STREAMING_IDLE → VIEWER_STAGE_LOADED` | Viewer completion policy. | The two mandated updates; only investigate if unexpectedly large. |
 
 ## How we will use the results

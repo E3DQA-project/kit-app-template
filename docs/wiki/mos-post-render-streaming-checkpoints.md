@@ -14,7 +14,7 @@ USD stage begins opening
   → send “stage has loaded”
 ```
 
-So the leading hypothesis is: **one or more Kit streaming systems are busy after the first stable viewport image exists.** The code does not identify which streamer or asset type caused the busy state yet. That is what the next instrumentation must answer.
+The checkpoint experiment corrected the initial hypothesis: the streaming manager became idle after only 1.9–7.2 seconds, while `ASSETS_LOADED` did not arrive until 23.1–28.0 seconds. The actual dominant interval is therefore **`USD_ASSETS_LOADING → USD_ASSETS_LOADED`**, not `STREAMING_BUSY → STREAMING_IDLE`. Read the [asset-loading checkpoint record](../records/2026-08-17-mos-asset-loading-checkpoints.md) for the numbers.
 
 ## Exact checkpoints to add
 
@@ -47,7 +47,7 @@ The viewer loading manager subscribes to only three signals relevant to final co
 
 Its coroutine waits until both `ASSETS_LOADED` has happened and `isBusy` is false, then waits exactly two Kit updates and sends `openedStageResult` (“stage has loaded”).
 
-That means `VIEWER_STAGE_LOADED - STREAMING_IDLE` should be only a few frames. If it is large, we should investigate scheduling or the viewer extension itself. If `STREAMING_BUSY → STREAMING_IDLE` is large—as the current evidence suggests—that interval contains the real cost.
+That means `VIEWER_STAGE_LOADED - STREAMING_IDLE` should be only a few frames. If it is large, we should investigate scheduling or the viewer extension itself. The measured run instead showed a short `STREAMING_BUSY → STREAMING_IDLE` interval and a long `USD_ASSETS_LOADING → USD_ASSETS_LOADED` interval. The latter contains the real cost.
 
 ## Optimization map
 
@@ -60,11 +60,11 @@ That means `VIEWER_STAGE_LOADED - STREAMING_IDLE` should be only a few frames. I
 | `STREAMING_IDLE → VIEWER_STAGE_LOADED` | Viewer completion policy | two update timestamps and dispatch timestamp | Usually do not optimize first: the implementation deliberately waits only two frames. Validate before changing. |
 | `VIEWER_STAGE_LOADED → FIRST_USER_ACTION` | Human reaction / input routing | first input marker | Do not call it load time. It is a useful validation upper bound only. |
 
-## Recommended next experiment
+## Next experiment
 
-Do not change loading behavior yet. First add the six bold lifecycle timestamps: `USD_ASSETS_LOADED`, `STREAMING_BUSY`, `STREAMING_IDLE`, two post-idle updates, and `VIEWER_STAGE_LOADED`. Also sample `get_stage_loading_status()` only when its text or file counts change.
+The lifecycle timestamps are now implemented and measured. Keep loading behavior unchanged, but run the same sequence from NAS and local SSD while tracing **`USD_ASSETS_LOADING → USD_ASSETS_LOADED`** with Kit/Tracy CPU+GPU profiling. The current loading-status API produced only a final empty snapshot, so it cannot identify the late asset by itself.
 
-Run the same four-scene sequence from NAS, then repeat from local SSD. For the slowest scene, capture a Kit/Tracy CPU+GPU trace covering `STREAMING_BUSY → STREAMING_IDLE`. The trace should reveal whether the wait is storage I/O, CPU processing, GPU uploads, shader/pipeline work, or VRAM pressure.
+The trace should distinguish asset I/O / USDZ archive work, USD and MDL/material processing, texture work, GPU upload, shader/pipeline work, or another asynchronous dependency.
 
 ## Source locations
 

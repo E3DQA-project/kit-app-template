@@ -21,6 +21,12 @@ import omni.kit.app
 import omni.kit.livestream.messaging as messaging
 import omni.usd
 
+from .stream_diagnostics import (
+    _LoadingStatusGate,
+    _StreamDiagnostics,
+    _StreamingStateGate,
+)
+
 
 class LoadingManager:
     """Manages the loading of USD stages and sends messages to the client"""
@@ -43,6 +49,10 @@ class LoadingManager:
         # new unsaved stage
         self._persisted_stage: bool = False
         self._is_evaluating_loading_status: bool = False
+        self._stream_generation = 0
+        self._stream_diag = None
+        self._streaming_state_gate = _StreamingStateGate()
+        self._loading_status_gate = _LoadingStatusGate()
 
         # -- register outgoing events/messages
         outgoing = [
@@ -93,9 +103,34 @@ class LoadingManager:
                 on_event=self._on_stage_event_opening,
             ),
             ed.observe_event(
+                observer_name="LoadingManager:stage:assets_loading",
+                event_name=usd_context.stage_event_name(omni.usd.StageEventType.ASSETS_LOADING),
+                on_event=self._on_stage_event_assets_loading,
+            ),
+            ed.observe_event(
                 observer_name="LoadingManager:stage:assets_loaded",
                 event_name=usd_context.stage_event_name(omni.usd.StageEventType.ASSETS_LOADED),
                 on_event=self._on_stage_event_assets_loaded,
+            ),
+            ed.observe_event(
+                observer_name="LoadingManager:stage:geostreaming_started",
+                event_name=usd_context.stage_event_name(omni.usd.StageEventType.HYDRA_GEOSTREAMING_STARTED),
+                on_event=lambda _event: self._record_stream_event("GEOSTREAMING_STARTED"),
+            ),
+            ed.observe_event(
+                observer_name="LoadingManager:stage:geostreaming_stopped",
+                event_name=usd_context.stage_event_name(omni.usd.StageEventType.HYDRA_GEOSTREAMING_STOPPED),
+                on_event=lambda _event: self._record_stream_event("GEOSTREAMING_STOPPED"),
+            ),
+            ed.observe_event(
+                observer_name="LoadingManager:stage:geostreaming_memory",
+                event_name=usd_context.stage_event_name(omni.usd.StageEventType.HYDRA_GEOSTREAMING_STOPPED_NOT_ENOUGH_MEM),
+                on_event=lambda _event: self._record_stream_event("GEOSTREAMING_STOPPED_NOT_ENOUGH_MEM"),
+            ),
+            ed.observe_event(
+                observer_name="LoadingManager:stage:geostreaming_limit",
+                event_name=usd_context.stage_event_name(omni.usd.StageEventType.HYDRA_GEOSTREAMING_STOPPED_AT_LIMIT),
+                on_event=lambda _event: self._record_stream_event("GEOSTREAMING_STOPPED_AT_LIMIT"),
             ),
         ])
 
@@ -106,6 +141,21 @@ class LoadingManager:
                 on_event=self._on_rxt_streaming_event,
             )
         )
+
+    def _record_stream_event(self, event: str, **fields) -> None:
+        if self._stream_diag is not None:
+            self._stream_diag.record(event, **fields)
+
+    def _record_loading_status(self) -> None:
+        try:
+            message, files_loaded, total_files = omni.usd.get_context().get_stage_loading_status()
+            if self._loading_status_gate.observe(message, files_loaded, total_files):
+                self._record_stream_event(
+                    "STAGE_LOADING_STATUS", message=repr(message),
+                    files_loaded=files_loaded, total_files=total_files,
+                )
+        except Exception as exc:
+            self._record_stream_event("STAGE_LOADING_STATUS_UNAVAILABLE", error=type(exc).__name__)
 
     def _on_load_state_query(self, event: carb.events.IEvent) -> None:
         payload = {"loading_state": "idle", "url": self._opened_stage_url}
@@ -200,7 +250,16 @@ class LoadingManager:
         else:
             self._opened_stage_url = ''
         self._persisted_stage = True if self._opened_stage_url else False
+        self._stream_generation += 1
+        self._stream_diag = _StreamDiagnostics(self._stream_generation, self._opened_stage_url)
+        self._streaming_state_gate = _StreamingStateGate()
+        self._loading_status_gate = _LoadingStatusGate()
+        self._record_stream_event("USD_OPENING", persisted=self._persisted_stage)
         return
+
+    def _on_stage_event_assets_loading(self, _event) -> None:
+        if self._stage_is_opening:
+            self._record_stream_event("USD_ASSETS_LOADING")
 
     def _on_stage_event_assets_loaded(self, event) -> None:
         """Manage extension state via the stage event stream.
@@ -215,6 +274,8 @@ class LoadingManager:
             return
         self._stage_is_opening = False
         self._stage_has_opened = True
+        self._record_stream_event("USD_ASSETS_LOADED")
+        self._record_loading_status()
 
         # Async call to evaluate opened state
         asyncio.ensure_future(self._evaluate_load_status())
@@ -228,7 +289,10 @@ class LoadingManager:
             event (carb.events.IEvent): Contains payload sender and type -
             https://docs.omniverse.nvidia.com/kit/docs/kit-manual/105.0/carb.events/carb.events.IEvent.html
         """
-        self._streaming_manager_is_busy = event.payload['isBusy']
+        self._streaming_manager_is_busy = bool(event.payload['isBusy'])
+        transition = self._streaming_state_gate.observe(self._streaming_manager_is_busy)
+        if transition is not None:
+            self._record_stream_event(transition, signal="omni.streamingstatus")
 
     async def _evaluate_load_status(self):
         """
@@ -243,18 +307,23 @@ class LoadingManager:
             return
         self._is_evaluating_loading_status = True
 
-        # Wait until all dependencies have loaded by streaming manager
+        # Wait until all dependencies have loaded by streaming manager.
         while self._streaming_manager_is_busy or not self._stage_has_opened:
+            self._record_loading_status()
             await omni.kit.app.get_app().next_update_async()
 
-        for _ in range(2):
+        self._record_loading_status()
+        self._record_stream_event("STREAMING_GATE_CLEAR")
+        for update_number in range(1, 3):
             await omni.kit.app.get_app().next_update_async()
+            self._record_stream_event(f"POST_STREAMING_UPDATE_{update_number}")
 
         # Stage has loaded with all dependencies. Send message to client.
         url = self._requested_stage_url if self._requested_stage_url  else '[obfuscated]'
         carb.log_info(
             f'Sending message to client that stage has loaded: {url}'
         )
+        self._record_stream_event("VIEWER_STAGE_LOADED")
         payload = {"url": url, "result": "success", "error": ''}
         get_eventdispatcher().dispatch_event("openedStageResult", payload=payload)
 
@@ -273,6 +342,7 @@ class LoadingManager:
 
         # Send progress message
         carb.log_info('Sending message to client about loading progress.')
+        self._record_stream_event("STREAMING_PROGRESS", payload=repr(dict(event.payload)))
         get_eventdispatcher().dispatch_event("updateProgressAmount", payload=dict(event.payload))
 
     def _on_activity(self, event: carb.events.IEvent):
@@ -285,6 +355,7 @@ class LoadingManager:
             return
 
         carb.log_info('Storing message about loading activity.')
+        self._record_stream_event("STREAMING_ACTIVITY", payload=repr(dict(event.payload)))
         # Send activity message
         carb.log_info('Sending message to client about loading activity.')
         get_eventdispatcher().dispatch_event("updateProgressActivity", payload=dict(event.payload))
@@ -306,3 +377,4 @@ class LoadingManager:
         self._stage_has_opened = False
         self._streaming_manager_is_busy = False
         self._persisted_stage = False
+        self._stream_diag = None
