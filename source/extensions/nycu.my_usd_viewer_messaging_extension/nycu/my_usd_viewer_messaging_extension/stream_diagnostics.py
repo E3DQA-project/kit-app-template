@@ -54,6 +54,27 @@ class _LoadingStatusGate:
         return True
 
 
+class _ActivityCaptureGate:
+    """Own one activity-profiler capture token at a time."""
+
+    def __init__(self) -> None:
+        self._token: Optional[int] = None
+
+    def begin(self, enable: Callable[[], int]) -> bool:
+        if self._token is not None:
+            return False
+        self._token = enable()
+        return True
+
+    def end(self, disable: Callable[[int], None]) -> bool:
+        if self._token is None:
+            return False
+        token = self._token
+        self._token = None
+        disable(token)
+        return True
+
+
 class _StreamDiagnostics:
     def __init__(
         self, generation: int, stage_url: str, clock: Optional[Callable[[], float]] = None

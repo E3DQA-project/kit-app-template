@@ -12,6 +12,7 @@ sys.modules["stream_diagnostics"] = stream_diagnostics
 SPEC.loader.exec_module(stream_diagnostics)
 _StreamingStateGate = stream_diagnostics._StreamingStateGate
 _LoadingStatusGate = stream_diagnostics._LoadingStatusGate
+_ActivityCaptureGate = stream_diagnostics._ActivityCaptureGate
 
 
 class StreamDiagnosticsTests(unittest.TestCase):
@@ -30,6 +31,16 @@ class StreamDiagnosticsTests(unittest.TestCase):
         self.assertFalse(gate.observe("Downloading", 1, 5))
         self.assertTrue(gate.observe("Downloading", 2, 5))
         self.assertTrue(gate.observe("Finalizing", 2, 5))
+
+    def test_activity_capture_gate_releases_exactly_one_token(self):
+        gate = _ActivityCaptureGate()
+        released = []
+
+        self.assertTrue(gate.begin(lambda: 73))
+        self.assertFalse(gate.begin(lambda: 99))
+        self.assertTrue(gate.end(released.append))
+        self.assertEqual(released, [73])
+        self.assertFalse(gate.end(released.append))
 
 
 if __name__ == "__main__":

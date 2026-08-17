@@ -23,6 +23,10 @@ Do not combine the performance comparison and heavy tracing in one result. Profi
 
 Run A first. A large NAS-to-SSD improvement changes the direction of the investigation immediately. Run B then explains whatever remains, instead of producing a complicated trace that may include network delay.
 
+## First result (2026-08-17)
+
+The first controlled run did **not** find an NAS-to-SSD improvement: the median asset-loading interval was 20.68 s on NAS and 20.94 s on SSD for matched USDZs and camera metadata. The separate CPU trace captured the same window and showed RTX/CUDA submission-completion waits lasting about 20.7 s. This redirects the next step to GPU-capable tracing rather than local caching. See the [NAS/SSD and CPU-trace record](../records/2026-08-17-mos-nas-ssd-and-cpu-trace.md) for methodology, numbers, and limitations.
+
 ## Run A: controlled NAS versus local SSD
 
 ### Setup
@@ -77,6 +81,7 @@ This build does not currently have a Tracy extension in its extension cache. The
    ```bash
    ./repo.sh launch nycu.mos_app.kit -- \
      --enable omni.activity.profiler \
+     --/exts/nycu.my_usd_viewer_messaging_extension/sceneLoadingActivityCapture=true \
      --/app/profilerBackend=cpu \
      --/app/profileFromStart=true \
      --/plugins/carb.profiler-cpu.plugin/saveProfile=true \

@@ -22,6 +22,7 @@ import omni.kit.livestream.messaging as messaging
 import omni.usd
 
 from .stream_diagnostics import (
+    _ActivityCaptureGate,
     _LoadingStatusGate,
     _StreamDiagnostics,
     _StreamingStateGate,
@@ -53,6 +54,9 @@ class LoadingManager:
         self._stream_diag = None
         self._streaming_state_gate = _StreamingStateGate()
         self._loading_status_gate = _LoadingStatusGate()
+        self._activity_capture_gate = _ActivityCaptureGate()
+        self._activity_profiler = None
+        self._activity_profiler_module = None
 
         # -- register outgoing events/messages
         outgoing = [
@@ -146,6 +150,53 @@ class LoadingManager:
         if self._stream_diag is not None:
             self._stream_diag.record(event, **fields)
 
+    def _scene_loading_activity_capture_is_enabled(self) -> bool:
+        try:
+            return carb.settings.get_settings().get_as_bool(
+                "/exts/nycu.my_usd_viewer_messaging_extension/sceneLoadingActivityCapture"
+            )
+        except Exception:
+            return False
+
+    def _begin_scene_loading_activity_capture(self) -> None:
+        if not self._persisted_stage or not self._scene_loading_activity_capture_is_enabled():
+            return
+        try:
+            import omni.activity.profiler as activity_profiler
+        except ImportError:
+            self._record_stream_event("ACTIVITY_CAPTURE_UNAVAILABLE", reason="extension_not_enabled")
+            return
+        profiler = None
+        try:
+            profiler = activity_profiler.acquire_activity_profiler(
+                plugin_name="omni.activity.profiler.plugin"
+            )
+            if not self._activity_capture_gate.begin(
+                lambda: profiler.enable_capture_mask(activity_profiler.CAPTURE_MASK_SCENE_LOADING)
+            ):
+                activity_profiler.release_activity_profiler(profiler)
+                return
+            self._activity_profiler = profiler
+            self._activity_profiler_module = activity_profiler
+            self._record_stream_event("ACTIVITY_SCENE_LOADING_CAPTURE_STARTED")
+        except Exception as exc:
+            if profiler is not None:
+                activity_profiler.release_activity_profiler(profiler)
+            self._record_stream_event("ACTIVITY_CAPTURE_UNAVAILABLE", error=type(exc).__name__)
+
+    def _end_scene_loading_activity_capture(self) -> None:
+        profiler = self._activity_profiler
+        activity_profiler = self._activity_profiler_module
+        self._activity_profiler = None
+        self._activity_profiler_module = None
+        if profiler is None or activity_profiler is None:
+            return
+        try:
+            if self._activity_capture_gate.end(profiler.disable_capture_mask):
+                self._record_stream_event("ACTIVITY_SCENE_LOADING_CAPTURE_STOPPED")
+        finally:
+            activity_profiler.release_activity_profiler(profiler)
+
     def _record_loading_status(self) -> None:
         try:
             message, files_loaded, total_files = omni.usd.get_context().get_stage_loading_status()
@@ -205,6 +256,7 @@ class LoadingManager:
         # Check to see if we've already loaded the current stage.
         url = process_url(self._requested_stage_url)
 
+        self._end_scene_loading_activity_capture()
         stage = omni.usd.get_context().get_stage()
         current_stage = stage.GetRootLayer().identifier if stage else ''
 
@@ -260,6 +312,7 @@ class LoadingManager:
     def _on_stage_event_assets_loading(self, _event) -> None:
         if self._stage_is_opening:
             self._record_stream_event("USD_ASSETS_LOADING")
+            self._begin_scene_loading_activity_capture()
 
     def _on_stage_event_assets_loaded(self, event) -> None:
         """Manage extension state via the stage event stream.
@@ -275,6 +328,7 @@ class LoadingManager:
         self._stage_is_opening = False
         self._stage_has_opened = True
         self._record_stream_event("USD_ASSETS_LOADED")
+        self._end_scene_loading_activity_capture()
         self._record_loading_status()
 
         # Async call to evaluate opened state
@@ -364,6 +418,7 @@ class LoadingManager:
         """
         Clean up subscriptions
         """
+        self._end_scene_loading_activity_capture()
         if self._subscriptions:
             self._subscriptions.clear()
 
@@ -371,6 +426,7 @@ class LoadingManager:
         """
         Reset the internal state - ready for new stage to be loaded
         """
+        self._end_scene_loading_activity_capture()
         stage = omni.usd.get_context().get_stage()
         self._requested_stage_url = ""
         self._opened_stage_url = stage.GetRootLayer().identifier if stage else ""
