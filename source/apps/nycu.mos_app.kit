@@ -119,9 +119,13 @@ experience = "MOS App"
 [settings]
 crashreporter.compressDumpFiles = true
 renderer.enabled = "rtx"  # enable rtx renderer
+# Keep the UI responsive while RTX pipeline/shader work is being finalized.
+# A cold shader cache can otherwise block the participant prompt during startup.
+rtx.initializer.asyncShaderFinalizing = true
+rtx.shader.enableAsyncCompilation = true
 # By default rtx is setup to be mgpu but in some context you might want to run on
 # a single gpu if so set this setting to false
-renderer.multiGpu.enabled = true
+renderer.multiGpu.enabled = false
 rendergraph.maxFramesInFlight = 2
 rtx-transient.dlssg.enabled=false  # Disable DLSS otherwise it can push the framerate above the locked limit
 telemetry.disableInternalSessionCheck = true
@@ -160,22 +164,22 @@ type = "ApplicationTemplate" # Repo Template Metadata
 # BEGIN GENERATED PART (Remove from 'BEGIN' to 'END' to regenerate)
 ########################################################################################################################
 
-# Kit SDK Version: 110.0.0+feature.276876.4a5123f4.gl
+# Kit SDK Version: 110.2.0+feature.342835.698af100.gl
 
 # Version lock for all dependencies:
 [settings.app.exts]
 enabled = [
 	"omni.anim.curve.core-1.6.0",
 	"omni.graph.action-2.10.2",
-	"omni.graph.action_nodes-2.10.2",
-	"omni.graph.action_nodes_core-2.10.2",
-	"omni.graph.nodes-2.10.2",
-	"omni.graph.nodes_core-2.10.2",
+	"omni.graph.action_nodes-2.11.0",
+	"omni.graph.action_nodes_core-2.11.0",
+	"omni.graph.nodes-2.12.0",
+	"omni.graph.nodes_core-2.11.0",
 	"omni.graph.scriptnode-2.10.2",
-	"omni.graph.ui_nodes-2.10.5",
+	"omni.graph.ui_nodes-2.11.1",
 	"omni.kit.data2ui.core-1.1.4",
 	"omni.kit.data2ui.usd-1.1.4",
-	"omni.kit.livestream.messaging-1.3.1",
+	"omni.kit.livestream.messaging-1.3.3",
 	"omni.no_code_ui.bundle-1.1.4",
 	"omni.usd_viewer.samples-106.3.3",
 ]

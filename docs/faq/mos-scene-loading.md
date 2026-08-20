@@ -2,44 +2,59 @@
 
 ## Why do the logs say the scene is ready in a few milliseconds when I wait 20–30 seconds?
 
-They are measuring different things. MOS can finish opening the stage, positioning the camera, and show a stable-looking early frame quickly. Kit can still be preparing the scene in the background. The participant-visible completion point is closer to `USD_ASSETS_LOADED` and the viewer’s final “stage loaded” message, not `STAGE_OPENED` or `RENDER_STABLE`.
+They measure different boundaries. `STAGE_OPENED`, camera setup, and MOS's early renderer callbacks happen quickly. Kit can still be waiting for late asset and RTX/graphics work. The participant-facing interval is closer to `VIEWER_STAGE_LOADED` and the first deliberate input than to `STAGE_OPENED`.
 
-## Does loading from disk happen before `RENDER_STABLE`?
+## Does `RENDER_STABLE` mean the scene is completely rendered and interactable?
 
-Some of it does, but “disk loading” is not one isolated step. Kit can read enough data to render an early stable frame while it continues resolving assets, preparing materials, creating GPU resources, and waiting on the RTX pipeline. `USD_ASSETS_LOADING → USD_ASSETS_LOADED` is a broad asset-readiness interval, not a stopwatch for reading one USDZ file.
+No. It means the captured viewport image passed the stability test. In the latest run, `RENDER_STABLE` occurred at 7.726 seconds, while `USD_ASSETS_LOADED` occurred at 27.336 seconds and the first `W` input at 27.829 seconds.
 
-## Why did the first timing records look much shorter than the delay I saw in the GUI?
+## What exactly happens during the missing 20 seconds?
 
-The original markers stopped at an early renderer or stage-open checkpoint. They did not prove that all scene assets were ready for interaction. The later viewer markers and first-input marker showed the real gap: the scene could appear stable after a few seconds but remained in the asset-loading lifecycle for about 20 seconds longer.
+The current traces do not expose a named operation for all of it. The detailed latest sequence is:
 
-## What does `FIRST_USER_ACTION` mean? Is it load time?
+- MDL activity messages report progress `1.0` around +7.09 seconds.
+- Three viewport samples confirm a stable image by +7.726 seconds.
+- No detailed Kit activity checkpoint appears until `USD_ASSETS_LOADED` at +27.336 seconds.
+- The viewer gate clears 3 ms later and reports the stage loaded 14 ms after that.
 
-No. It records the first keyboard or mouse action after a scene becomes usable. It is a useful validation that the participant could interact, but it includes human reaction time. Use `VIEWER_STAGE_LOADED` for application readiness and `FIRST_USER_ACTION` as a user-experience cross-check.
+A CPU trace from an earlier matched run shows a roughly 20.7-second RTX graphicsmux `CommandList::waitForLastSubmission` nested inside `RtxHydraEngine::endFrame`. This strongly points to a graphics-backend synchronization/completion wait, but it does not identify what the backend or driver is waiting for.
 
-## Did moving the 1 GB USDZ files from NAS to SSD help?
+## Is the USDZ file slow to open?
 
-Not in the first controlled run. For four byte-identical scenes with matching camera metadata, the median `USD_ASSETS_LOADING → USD_ASSETS_LOADED` duration was 20.68 s from NAS and 20.94 s from SSD. That means plain file location is not the first bottleneck to optimize.
+Not according to the measured boundary. The latest `omni.usd` log reported the USDZ opened successfully in about 2 ms, and `BEGIN → STAGE_OPENED` was 129 ms. The file-open boundary is not where the 20-second delay appears.
 
-A NAS can still be fast because it or Linux may cache data in RAM, and the measured interval includes much more than file reads. The test was app-cold, not a forced disk-cold benchmark, so it does not claim the NAS is intrinsically faster than the SSD.
+## Did loading from the SSD help compared with the NAS?
 
-## What did the CPU trace show?
+Not consistently. The matched median was 20.681 s from NAS and 20.944 s from SSD. The SSD was not faster overall. The experiment was app-cold, not a forced disk-cold benchmark, and the measured interval includes much more than raw file reads.
 
-The trace hook captured exactly the slow asset-loading interval. During it, the host spent about 20.7 seconds in RTX/CUDA submission-completion and command-list wait spans. This is evidence that the CPU is waiting on the RTX/GPU path, not spending 20 seconds doing ordinary Python or USD CPU work.
+## Is the GPU overloaded or out of VRAM?
 
-It is not yet a GPU kernel breakdown. A CPU trace cannot identify whether the GPU is busy with texture upload, shader compilation, memory residency, or rendering.
+The telemetry says no for the measured run: GPU utilization averaged 5%, peaked at 19%, and VRAM stayed between 4.45 and 5.56 GB of 32 GB. This does not rule out a driver or synchronization problem, but it argues against ordinary saturation or memory exhaustion.
 
-## What happens next?
+## Did Vulkan or CUDA show a 20-second workload?
 
-Capture a GPU-capable timeline over the same markers using Kit Tracy with GPU injection or NVIDIA Nsight. The aim is to distinguish texture/geometry upload, shader or MDL compilation, VRAM allocation/eviction, and normal rendering work. The full method and first results are in [the NAS/SSD and CPU-trace record](../records/2026-08-17-mos-nas-ssd-and-cpu-trace.md).
+No. Vulkan showed only a few milliseconds of work per second, and the CUDA-plus-Vulkan report contained no long CUDA kernel or memory-copy operation. The CPU trace still showed Kit waiting in the RTX graphics submission path, which is a lower-level boundary than those traces exposed.
 
-## Can asynchronous or parallel loading still make scene changes faster?
+## Is this definitely an RTX 5090 bug?
 
-Potentially, yes—but only after the GPU trace tells us what resources are limiting the current load.
+Not proven. The machine uses an RTX 5090 and the evidence is compatible with a Blackwell/driver/Kit graphics-backend interaction, but the current measurements cannot isolate the driver as the cause. A driver-level graphics trace is needed before making that claim.
 
-If the limit is CPU decoding or archive work, parallel preparation may help. If it is shader compilation, warming the shader/material cache may help. If it is GPU uploads or VRAM pressure, loading the next scene in parallel could make the current scene worse by competing for GPU memory.
+## What did the Kit upgrade fix?
 
-A likely eventual design is double-buffered preloading: keep the current scene interactive, prepare the next scene in an isolated context, and swap only when it is genuinely ready. That needs careful GPU-memory budgeting and a trace-backed decision first.
+Kit was upgraded from 110.0.0 to 110.2.0. A cold-start PSO compilation hang prevented the participant prompt from accepting input. Asynchronous shader-finalization settings removed that startup hang and restored a usable prompt at roughly 3 seconds. The scene's later 20-second loading delay remained.
 
-## Why did an SSD experiment have to be repeated?
+## Did disabling multi-GPU fix the problem?
 
-The first SSD mirror omitted a sibling `geom_optim/output/cameras.json` file. MOS therefore used its fallback camera, unlike the NAS run. The result was excluded, the metadata was copied with its hash verified, and the SSD baseline was repeated. This is why controlled comparisons must preserve the complete scene setup, not only the USDZ bytes.
+No. It improved one matched SSD run from 20.852 s to 19.591 s, about 6%, but did not remove the nearly fixed delay. It remains the correct configuration for this single-GPU machine, but it is not the primary bottleneck.
+
+## Can parallel or asynchronous scene loading fix it?
+
+Maybe, but not safely yet. CPU decompression or preparation could benefit from overlap. GPU uploads, VRAM residency, or a serialized RTX fence could become slower if another scene competes for the same resources. We need to identify the blocked operation first.
+
+## What is the next useful experiment?
+
+Run one scene with a narrow driver-level graphics trace covering exactly `USD_ASSETS_LOADING → USD_ASSETS_LOADED`, while retaining the MOS markers. The goal is to identify whether the missing time is a driver fence, graphicsmux submission, resource upload, residency operation, or another backend wait.
+
+## Where are the detailed documents?
+
+Start with [the current knowledge page](../wiki/mos-scene-loading-current-knowledge.md) and [the consolidated evidence record](../records/2026-08-20-mos-scene-loading-consolidated.md). Historical runs remain in the [records directory](../records/).

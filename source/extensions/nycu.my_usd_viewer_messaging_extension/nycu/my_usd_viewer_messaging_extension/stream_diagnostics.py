@@ -27,6 +27,14 @@ def _log_info(message: str) -> None:
         omni.log.info(message)
 
 
+def _begin_nvtx_range(gate: "_NvtxRangeGate", profiler, name: str) -> bool:
+    return gate.begin(lambda: profiler.begin(1, name))
+
+
+def _end_nvtx_range(gate: "_NvtxRangeGate", profiler) -> bool:
+    return gate.end(lambda: profiler.end(1))
+
+
 class _StreamingStateGate:
     """Emit only transitions in a streamer's busy state."""
 
@@ -51,6 +59,27 @@ class _LoadingStatusGate:
         if current == self._previous:
             return False
         self._previous = current
+        return True
+
+
+class _NvtxRangeGate:
+    """Own one NVTX push/pop range at a time."""
+
+    def __init__(self) -> None:
+        self._is_open = False
+
+    def begin(self, push: Callable[[], None]) -> bool:
+        if self._is_open:
+            return False
+        push()
+        self._is_open = True
+        return True
+
+    def end(self, pop: Callable[[], None]) -> bool:
+        if not self._is_open:
+            return False
+        self._is_open = False
+        pop()
         return True
 
 

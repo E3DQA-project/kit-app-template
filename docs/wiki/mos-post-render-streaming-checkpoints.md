@@ -2,7 +2,7 @@
 
 ## The important finding
 
-The current MOS measurements show a stable swapchain image after 2.4–7.8 seconds, but the viewer reports the stage loaded only after 22.7–28.0 seconds. That remaining ~20 seconds is not an unexplained renderer wait any more.
+The current MOS measurements show a stable swapchain image after 2.4–7.8 seconds, but the viewer reports the stage loaded only after 22.7–28.0 seconds. We have isolated that remaining ~20 seconds to the `USD_ASSETS_LOADING → USD_ASSETS_LOADED` interval, but its internal owner is still not identified.
 
 The local `nycu.my_usd_viewer_messaging_extension` defines its completion rule in `stage_loading.py`:
 
@@ -15,6 +15,8 @@ USD stage begins opening
 ```
 
 The checkpoint experiment corrected the initial hypothesis: the streaming manager became idle after only 1.9–7.2 seconds, while `ASSETS_LOADED` did not arrive until 23.1–28.0 seconds. The actual dominant interval is therefore **`USD_ASSETS_LOADING → USD_ASSETS_LOADED`**, not `STREAMING_BUSY → STREAMING_IDLE`. Read the [asset-loading checkpoint record](../records/2026-08-17-mos-asset-loading-checkpoints.md) for the numbers.
+
+The latest one-scene activity trace adds an important limitation: it records a 6.984-second `Render Thread / Post Sync` span, but no named activity for the remaining gap. See the [current consolidated knowledge page](mos-scene-loading-current-knowledge.md) and [2026-08-20 evidence record](../records/2026-08-20-mos-scene-loading-consolidated.md).
 
 ## Exact checkpoints to add
 

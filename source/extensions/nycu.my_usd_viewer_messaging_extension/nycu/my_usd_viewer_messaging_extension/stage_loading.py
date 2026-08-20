@@ -24,6 +24,9 @@ import omni.usd
 from .stream_diagnostics import (
     _ActivityCaptureGate,
     _LoadingStatusGate,
+    _NvtxRangeGate,
+    _begin_nvtx_range,
+    _end_nvtx_range,
     _StreamDiagnostics,
     _StreamingStateGate,
 )
@@ -57,6 +60,8 @@ class LoadingManager:
         self._activity_capture_gate = _ActivityCaptureGate()
         self._activity_profiler = None
         self._activity_profiler_module = None
+        self._nvtx_range_gate = _NvtxRangeGate()
+        self._nvtx_profiler = None
 
         # -- register outgoing events/messages
         outgoing = [
@@ -158,6 +163,37 @@ class LoadingManager:
         except Exception:
             return False
 
+    def _scene_loading_nvtx_capture_is_enabled(self) -> bool:
+        try:
+            return carb.settings.get_settings().get_as_bool(
+                "/exts/nycu.my_usd_viewer_messaging_extension/sceneLoadingNvtxCapture"
+            )
+        except Exception:
+            return False
+
+    def _begin_scene_loading_nvtx_capture(self) -> None:
+        if not self._persisted_stage or not self._scene_loading_nvtx_capture_is_enabled():
+            return
+        try:
+            import carb.profiler as profiler
+
+            if _begin_nvtx_range(self._nvtx_range_gate, profiler, "MOS_SCENE_ASSETS_LOADING"):
+                self._nvtx_profiler = profiler
+                self._record_stream_event("NVTX_SCENE_LOADING_RANGE_STARTED")
+        except Exception as exc:
+            self._record_stream_event("NVTX_CAPTURE_UNAVAILABLE", error=type(exc).__name__)
+
+    def _end_scene_loading_nvtx_capture(self) -> None:
+        profiler = self._nvtx_profiler
+        self._nvtx_profiler = None
+        if profiler is None:
+            return
+        try:
+            if _end_nvtx_range(self._nvtx_range_gate, profiler):
+                self._record_stream_event("NVTX_SCENE_LOADING_RANGE_STOPPED")
+        except Exception as exc:
+            self._record_stream_event("NVTX_CAPTURE_UNAVAILABLE", error=type(exc).__name__)
+
     def _begin_scene_loading_activity_capture(self) -> None:
         if not self._persisted_stage or not self._scene_loading_activity_capture_is_enabled():
             return
@@ -257,6 +293,7 @@ class LoadingManager:
         url = process_url(self._requested_stage_url)
 
         self._end_scene_loading_activity_capture()
+        self._end_scene_loading_nvtx_capture()
         stage = omni.usd.get_context().get_stage()
         current_stage = stage.GetRootLayer().identifier if stage else ''
 
@@ -313,6 +350,7 @@ class LoadingManager:
         if self._stage_is_opening:
             self._record_stream_event("USD_ASSETS_LOADING")
             self._begin_scene_loading_activity_capture()
+            self._begin_scene_loading_nvtx_capture()
 
     def _on_stage_event_assets_loaded(self, event) -> None:
         """Manage extension state via the stage event stream.
@@ -329,6 +367,7 @@ class LoadingManager:
         self._stage_has_opened = True
         self._record_stream_event("USD_ASSETS_LOADED")
         self._end_scene_loading_activity_capture()
+        self._end_scene_loading_nvtx_capture()
         self._record_loading_status()
 
         # Async call to evaluate opened state
@@ -419,6 +458,7 @@ class LoadingManager:
         Clean up subscriptions
         """
         self._end_scene_loading_activity_capture()
+        self._end_scene_loading_nvtx_capture()
         if self._subscriptions:
             self._subscriptions.clear()
 
@@ -427,6 +467,7 @@ class LoadingManager:
         Reset the internal state - ready for new stage to be loaded
         """
         self._end_scene_loading_activity_capture()
+        self._end_scene_loading_nvtx_capture()
         stage = omni.usd.get_context().get_stage()
         self._requested_stage_url = ""
         self._opened_stage_url = stage.GetRootLayer().identifier if stage else ""

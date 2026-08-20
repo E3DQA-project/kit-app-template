@@ -1,5 +1,7 @@
 # Understanding MOS Scene Loading Times
 
+> Current canonical summary: [MOS scene loading: current knowledge](mos-scene-loading-current-knowledge.md).
+
 ## The simple version
 
 When you press **Next** in the MOS app, the app replaces the old 3D scene with a new USDZ scene. That is a chain of jobs, not one operation. We timestamp the chain so we can answer one question:

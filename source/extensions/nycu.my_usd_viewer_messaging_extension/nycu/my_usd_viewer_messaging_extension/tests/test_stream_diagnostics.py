@@ -13,6 +13,9 @@ SPEC.loader.exec_module(stream_diagnostics)
 _StreamingStateGate = stream_diagnostics._StreamingStateGate
 _LoadingStatusGate = stream_diagnostics._LoadingStatusGate
 _ActivityCaptureGate = stream_diagnostics._ActivityCaptureGate
+_NvtxRangeGate = stream_diagnostics._NvtxRangeGate
+_begin_nvtx_range = stream_diagnostics._begin_nvtx_range
+_end_nvtx_range = stream_diagnostics._end_nvtx_range
 
 
 class StreamDiagnosticsTests(unittest.TestCase):
@@ -41,6 +44,37 @@ class StreamDiagnosticsTests(unittest.TestCase):
         self.assertTrue(gate.end(released.append))
         self.assertEqual(released, [73])
         self.assertFalse(gate.end(released.append))
+
+    def test_nvtx_range_gate_opens_and_closes_once(self):
+        gate = _NvtxRangeGate()
+        calls = []
+
+        self.assertTrue(gate.begin(lambda: calls.append("push")))
+        self.assertFalse(gate.begin(lambda: calls.append("duplicate-push")))
+        self.assertTrue(gate.end(lambda: calls.append("pop")))
+        self.assertEqual(calls, ["push", "pop"])
+        self.assertFalse(gate.end(lambda: calls.append("duplicate-pop")))
+
+    def test_nvtx_range_helpers_use_profiler_begin_and_end(self):
+        class Profiler:
+            def __init__(self):
+                self.calls = []
+
+            def begin(self, mask, name):
+                self.calls.append(("begin", mask, name))
+
+            def end(self, mask):
+                self.calls.append(("end", mask))
+
+        gate = _NvtxRangeGate()
+        profiler = Profiler()
+
+        self.assertTrue(_begin_nvtx_range(gate, profiler, "MOS_SCENE_ASSETS_LOADING"))
+        self.assertTrue(_end_nvtx_range(gate, profiler))
+        self.assertEqual(
+            profiler.calls,
+            [("begin", 1, "MOS_SCENE_ASSETS_LOADING"), ("end", 1)],
+        )
 
 
 if __name__ == "__main__":
