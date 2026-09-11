@@ -13,6 +13,54 @@
         "volumetric_cleanliness": 3,
         "overall_quality": 4
       }
+    },
+    {
+      "saved_at": "2026-08-17T12:13:01.878650+00:00",
+      "scene_path": "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.25.usdz",
+      "scene_index": 0,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
+    },
+    {
+      "saved_at": "2026-08-17T12:13:33.984062+00:00",
+      "scene_path": "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.50.usdz",
+      "scene_index": 1,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
+    },
+    {
+      "saved_at": "2026-08-17T12:14:07.856344+00:00",
+      "scene_path": "/mnt/NAS/pierce/E3DQA_dataset/Matrix-3D_openusd/matrix3d_output_full/batch/photorealistic/index_0003/generated_3dgs_opt_downsample_p0.75.usdz",
+      "scene_index": 2,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
+    },
+    {
+      "saved_at": "2026-08-17T13:44:43.073746+00:00",
+      "scene_path": "/mnt/gen5_SSD/pierce/kit-app-template/_mos_asset_loading_experiment/ssd_mirror/index_0003/generated_3dgs_opt.usdz",
+      "scene_index": 0,
+      "scores": {
+        "texture_fidelity": 3,
+        "semantic_contextual_coherence": 3,
+        "geometric_consistency": 3,
+        "volumetric_cleanliness": 3,
+        "overall_quality": 3
+      }
     }
   ]
 }

@@ -24,6 +24,8 @@ import omni.ui as ui
 import omni.log
 import omni.usd
 
+from .camera_patterns import default_if_blank
+
 
 # ── Persistent settings keys ──────────────────────────────────────────────────
 _S = "/persistent/exts/usdz_folder_browser/"
@@ -466,8 +468,8 @@ class UsdzFolderBrowserExtension(omni.ext.IExt):
 
         # Restore persisted state
         folder   = _sget(self._s, _KEY_FOLDER, "")
-        pat0     = _sget(self._s, _KEY_PAT0, _DEFAULT_PAT0)
-        pat1     = _sget(self._s, _KEY_PAT1, _DEFAULT_PAT1)
+        pat0     = default_if_blank(_sget(self._s, _KEY_PAT0), _DEFAULT_PAT0)
+        pat1     = default_if_blank(_sget(self._s, _KEY_PAT1), _DEFAULT_PAT1)
         pat2     = _sget(self._s, _KEY_PAT2, "")
         override = _sget(self._s, _KEY_OVERRIDE, "")
 
