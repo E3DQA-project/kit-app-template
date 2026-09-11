@@ -12,6 +12,8 @@ class CameraConventionTests(unittest.TestCase):
         self.assertFalse(convention.rotation_is_world_to_camera)
         self.assertFalse(convention.opencv_axes)
         self.assertFalse(convention.swap_yz)
+        self.assertEqual(convention.camera_roll_degrees, 180)
+        self.assertEqual(convention.stage_up_axis, "y")
 
     def test_unknown_method_is_rejected(self):
         with self.assertRaises(ValueError):

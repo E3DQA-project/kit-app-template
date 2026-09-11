@@ -13,6 +13,8 @@ class CameraConvention:
     rotation_is_world_to_camera: bool
     opencv_axes: bool
     swap_yz: bool
+    camera_roll_degrees: int
+    stage_up_axis: str
 
 
 _CONVENTIONS = {
@@ -25,6 +27,11 @@ _CONVENTIONS = {
         rotation_is_world_to_camera=False,
         opencv_axes=False,
         swap_yz=False,
+        camera_roll_degrees=180,
+        # Matrix-3D camera poses use -Z forward and +Y image-down. Kit's
+        # navigation frame therefore needs Y-up; the USDZ metadata's Z-up
+        # declaration describes the exported volume, not the interaction basis.
+        stage_up_axis="y",
     ),
 }
 

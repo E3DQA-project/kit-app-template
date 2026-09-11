@@ -17,6 +17,7 @@ MOVE_ACCEL = "/persistent/app/viewport/manipulator/camera/moveAcceleration"
 MOVE_DAMP = "/persistent/app/viewport/manipulator/camera/moveDampening"
 FLY_ACCEL = "/persistent/app/viewport/manipulator/camera/flyAcceleration"
 FLY_DAMP = "/persistent/app/viewport/manipulator/camera/flyDampening"
+LOOK_SPEED_X = "/persistent/exts/omni.kit.manipulator.camera/lookSpeed/0"
 
 
 def _safe_get_float(settings: carb.settings.ISettings, path: str, fallback: float) -> float:
@@ -57,6 +58,11 @@ class CameraControlsExtension(omni.ext.IExt):
         self._settings.set(CURRENT_TOOL, "navigation")
         self._settings.set(ACTIVE_OPERATION, "fly")
         self._settings.set(DEFAULT_NAV_OPERATION, "fly")
+        # Matrix-3D uses the camera/image convention where a leftward
+        # horizontal drag/stick input must produce a rightward look response.
+        # Kit uses this shared look speed for mouse and gamepad look gestures.
+        current_look_x = _safe_get_float(self._settings, LOOK_SPEED_X, 180.0)
+        self._settings.set(LOOK_SPEED_X, -abs(current_look_x or 180.0))
 
         # Allow RMB drag controls by disabling RMB context menu in viewport.
         self._settings.set(CAM_CONTEXT_MENU, False)
@@ -136,6 +142,8 @@ class CameraControlsExtension(omni.ext.IExt):
             self._settings.set(ACTIVE_OPERATION, "fly")
             self._settings.set(DEFAULT_NAV_OPERATION, "fly")
             self._settings.set(CAM_CONTEXT_MENU, False)
+            current_look_x = _safe_get_float(self._settings, LOOK_SPEED_X, 180.0)
+            self._settings.set(LOOK_SPEED_X, -abs(current_look_x or 180.0))
 
             # Keep these camera manipulator values coherent for smooth fly movement.
             self._settings.set(MOVE_DAMP, fly_damp)

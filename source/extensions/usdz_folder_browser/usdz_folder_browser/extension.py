@@ -201,6 +201,8 @@ def _scene_preset_rot3(preset: str):
             "ry-90": (Gf.Vec3d(0, 1, 0), -90.0),
             "rz+90": (Gf.Vec3d(0, 0, 1),  90.0),
             "rz-90": (Gf.Vec3d(0, 0, 1), -90.0),
+            "rz+180": (Gf.Vec3d(0, 0, 1), 180.0),
+            "rz-180": (Gf.Vec3d(0, 0, 1), -180.0),
         }
         if p not in axis_map:
             return None
@@ -214,6 +216,14 @@ def _scene_preset_rot3(preset: str):
         )
     except Exception:
         return None
+
+
+def _camera_roll_rot3():
+    degrees = _CAMERA_CONVENTION.camera_roll_degrees
+    if not degrees:
+        return None
+    sign = "+" if degrees > 0 else "-"
+    return _scene_preset_rot3(f"rz{sign}{abs(degrees):g}")
 
 
 def _apply_camera(
@@ -253,11 +263,22 @@ def _apply_camera(
             r = _mm(pr, r)
             p = _mv(pr, p)
 
+        # Matrix-3D's native forward direction is correct in the USD viewer,
+        # but its image-up basis is inverted relative to the viewport camera.
+        # Apply the correction in camera-local space so forward and position do
+        # not change.
+        roll = _camera_roll_rot3()
+        if roll is not None:
+            r = _mm(r, roll)
+
+        # cameras.json stores a column-vector camera-to-world pose. USD's
+        # Gf.Matrix4d uses the equivalent row-vector representation, so the
+        # rotation must be transposed only at this serialization boundary.
         r0, r1, r2 = r
         xform = Gf.Matrix4d(
-            r0[0], r0[1], r0[2], 0.0,
-            r1[0], r1[1], r1[2], 0.0,
-            r2[0], r2[1], r2[2], 0.0,
+            r0[0], r1[0], r2[0], 0.0,
+            r0[1], r1[1], r2[1], 0.0,
+            r0[2], r1[2], r2[2], 0.0,
             p[0],  p[1],  p[2],  1.0,
         )
 
@@ -324,7 +345,7 @@ def _apply_camera(
         return False
 
 
-def _apply_orientation(preset: str, force_z_up: bool) -> bool:
+def _apply_orientation(preset: str, force_z_up: bool, stage_up_axis: str = "") -> bool:
     try:
         import omni.usd
         from pxr import Gf, Sdf, UsdGeom
@@ -333,9 +354,10 @@ def _apply_orientation(preset: str, force_z_up: bool) -> bool:
         if stage is None:
             return False
 
-        if force_z_up:
+        axis = (stage_up_axis or ("z" if force_z_up else "")).lower()
+        if axis in ("y", "z"):
             try:
-                UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+                UsdGeom.SetStageUpAxis(stage, getattr(UsdGeom.Tokens, axis))
             except Exception:
                 pass
 
@@ -937,7 +959,9 @@ class UsdzFolderBrowserExtension(omni.ext.IExt):
     def _post_load(self, p: dict) -> None:
         """Apply orientation fix and camera init after the stage is fully open."""
         try:
-            orient_ok = _apply_orientation(p["preset"], p["force_z"])
+            orient_ok = _apply_orientation(
+                p["preset"], p["force_z"], _CAMERA_CONVENTION.stage_up_axis
+            )
 
             cam_json = _resolve_cameras_json(p["path"], p["patterns"], p["override"])
             omni.log.warn(f"Resolved cameras.json: {cam_json}")
