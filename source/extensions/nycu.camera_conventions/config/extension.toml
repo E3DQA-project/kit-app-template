@@ -1,0 +1,9 @@
+[package]
+title = "NYCU Camera Conventions"
+version = "0.1.0"
+description = "Shared dataset camera-convention definitions for NYCU applications."
+category = "Library"
+keywords = ["camera", "convention", "matrix3d"]
+
+[[python.module]]
+name = "nycu.camera_conventions"

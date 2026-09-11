@@ -44,6 +44,7 @@ from .load_diagnostics import (
     _ReadinessGate,
     _RendererPhaseGate,
 )
+from nycu.camera_conventions import get_camera_convention
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -59,9 +60,13 @@ _METRICS: List[Tuple[str, str]] = [
     ("overall_quality",               "Overall quality"),
 ]
 
-# Scene orientation applied on every load (same defaults as usdz_folder_browser).
-_ORIENT_PRESET = "rx-90"
-_FORCE_Z_UP    = True
+# Scene/camera convention selected by the dataset-generation method. Matrix-3D
+# USDZ exports are already native Z-up, so no additional scene rotation is
+# applied. Other methods can be added to the shared convention module later.
+_CAMERA_METHOD = "matrix3d"
+_CAMERA_CONVENTION = get_camera_convention(_CAMERA_METHOD)
+_ORIENT_PRESET = _CAMERA_CONVENTION.scene_orientation
+_FORCE_Z_UP    = _CAMERA_CONVENTION.force_z_up
 
 # cameras.json walk-up search patterns (same defaults as usdz_folder_browser).
 _CAM_PATTERNS = [

@@ -25,6 +25,7 @@ import omni.log
 import omni.usd
 
 from .camera_patterns import default_if_blank
+from nycu.camera_conventions import get_camera_convention
 
 
 # ── Persistent settings keys ──────────────────────────────────────────────────
@@ -42,9 +43,13 @@ _KEY_PAT2      = _S + "camPattern2"
 _DEFAULT_PAT0 = "geom_optim/output/cameras.json"
 _DEFAULT_PAT1 = "cameras.json"
 
-# Applied automatically on every load (no UI).
-_SCENE_ORIENT_PRESET = "rx-90"
-_FORCE_Z_UP = True
+# Applied automatically on every load (no UI). Keep this explicit so other
+# dataset-generation methods can add their own convention without changing the
+# camera import code below.
+_CAMERA_METHOD = "matrix3d"
+_CAMERA_CONVENTION = get_camera_convention(_CAMERA_METHOD)
+_SCENE_ORIENT_PRESET = _CAMERA_CONVENTION.scene_orientation
+_FORCE_Z_UP = _CAMERA_CONVENTION.force_z_up
 
 # Optional file picker — imported at runtime so the extension resolver never
 # hard-fails on its absence in minimal (non-full-editor) configurations.
@@ -835,9 +840,9 @@ class UsdzFolderBrowserExtension(omni.ext.IExt):
         # Fixed axis/orientation convention on every load (Matrix-3D / DimensionX).
         preset = _SCENE_ORIENT_PRESET
         force_z = _FORCE_Z_UP
-        rot_w2c = False
-        cv_axes = False
-        swap_yz = False
+        rot_w2c = _CAMERA_CONVENTION.rotation_is_world_to_camera
+        cv_axes = _CAMERA_CONVENTION.opencv_axes
+        swap_yz = _CAMERA_CONVENTION.swap_yz
         try:
             self._m_rot_w2c.set_value(rot_w2c)
             self._m_cv_axes.set_value(cv_axes)

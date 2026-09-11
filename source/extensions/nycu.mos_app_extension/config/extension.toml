@@ -12,6 +12,7 @@ repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
 "omni.usd" = {}
 "omni.kit.commands" = {}
 "omni.kit.viewport.utility" = {}
+"nycu.camera_conventions" = {}
 
 [settings]
 
