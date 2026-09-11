@@ -21,3 +21,4 @@ define_app("nycu.mos_app.kit")
 
 -- Extensions
 include("source/extensions/nycu.mos_app_extension")
+include("source/extensions/nycu.camera_conventions")
