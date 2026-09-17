@@ -409,7 +409,12 @@ def select_kit(target_directory: Path, config: dict) -> str:
 
 
 def launch_kit(
-    app_name, target_directory: Path, config: dict = {}, dev_bundle: bool = False, extra_args: List[str] = []
+    app_name,
+    target_directory: Path,
+    config: dict = {},
+    dev_bundle: bool = False,
+    extra_args: List[str] = [],
+    no_nvrtc_cache: bool = False,
 ):
     # Some assumptions are being made on the folder structure of target_directory.
     # It should be the `_build/${host_platform}/${config}/` folder which contains entrypoint scripts
@@ -436,6 +441,10 @@ def launch_kit(
     # If extra arguments were passed into launch, directly feed them into the Kit binary.
     if extra_args:
         kit_cmd += extra_args
+
+    if app_name == "nycu.mos_app.kit" and not no_nvrtc_cache:
+        wrapper = Path(omni.repo.man.resolve_tokens("${root}/tools/mos_nvrtc_cache_v2/default_launch.py"))
+        kit_cmd = [sys.executable, str(wrapper), "--app-command", *kit_cmd[:1], "--", *kit_cmd[1:]]
 
     _ = _run_process(
         kit_cmd,
@@ -498,6 +507,14 @@ def add_args(parser: argparse.ArgumentParser):
         help="Generate a Docker container image rather than package archive.",
         required=False,
         action="store_true",
+    )
+
+    parser.add_argument(
+        "--no-nvrtc-cache",
+        dest="no_nvrtc_cache",
+        required=False,
+        action="store_true",
+        help="Launch local MOS without the default NVRTC cache wrapper.",
     )
 
     parser.add_argument(
@@ -566,7 +583,7 @@ def setup_repo_tool(parser: argparse.ArgumentParser, config: Dict) -> Optional[C
             console.print("\[ctrl+c to Exit]", style=INFO_COLOR)
             if options.from_package:
                 package_path = expand_package(options.from_package)
-                launch_kit(app_name, package_path, config_dict, dev_bundle, options.extra_args)
+                launch_kit(app_name, package_path, config_dict, dev_bundle, options.extra_args, True)
 
             # Launching a locally built application
             else:
@@ -586,7 +603,7 @@ def setup_repo_tool(parser: argparse.ArgumentParser, config: Dict) -> Optional[C
                     return
 
                 # Launch the thing, or query the user and then launch the thing.
-                launch_kit(app_name, build_path, config_dict, dev_bundle, options.extra_args)
+                launch_kit(app_name, build_path, config_dict, dev_bundle, options.extra_args, options.no_nvrtc_cache)
 
         except (KeyboardInterrupt, SystemExit):
             console.print("Exiting", style=INFO_COLOR)
