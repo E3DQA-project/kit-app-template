@@ -40,5 +40,8 @@ deps/**/user.toml
 # claude code configs
 .claude/**
 
+# Repowise indexes and local analysis caches.
+.repowise/
+
 # Score files
 **/data/scores/
