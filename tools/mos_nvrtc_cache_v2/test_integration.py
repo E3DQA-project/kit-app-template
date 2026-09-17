@@ -79,6 +79,7 @@ def parent(shim, renderer):
         assert first_log.count('event=compile ') == 2
         assert first_log.count('event=stored ') == 2
         assert second_log.count('event=hit ') == 2
+        assert second_log.count('event=name_hit ') == 4
         assert 'event=compile ' not in second_log
         env['MOS_V2_MODE'] = 'seed'
         cold, cold_log = invoke()
@@ -95,6 +96,13 @@ def parent(shim, renderer):
         fallback, fallback_log = invoke()
         assert fallback == cold
         assert fallback_log.count('event=compile ') == 2, fallback_log
+        # Auto must also compile and restore the same output after truncation.
+        env['MOS_V2_MODE'] = 'auto'
+        for path in artifacts:
+            path.write_bytes(path.read_bytes()[:25])
+        auto_fallback, auto_fallback_log = invoke()
+        assert auto_fallback == cold
+        assert auto_fallback_log.count('event=compile ') == 2, auto_fallback_log
         # Source unchanged, but new name expressions require a different key.
         env['MOS_TEST_EXTRA'] = '1'
         extra, extra_log = invoke()
@@ -107,8 +115,9 @@ def parent(shim, renderer):
             data = bytearray(path.read_bytes())
             data[-1] ^= 1
             path.write_bytes(data)
-        _, corrupt_log = invoke()
-        assert corrupt_log.count('event=compile ') == 2
+        corrupt, corrupt_log = invoke()
+        assert corrupt == extra
+        assert corrupt_log.count('event=compile ') == 2, corrupt_log
         print('PASS: cold/warm identity, skipped compile, two programs, pointer lifetime, missing name, truncation, checksum, name-key isolation')
 
 
