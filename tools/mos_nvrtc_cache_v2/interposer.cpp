@@ -64,7 +64,7 @@ std::string take(const Bytes& b, std::size_t& pos) {
     std::string s(b.begin()+pos, b.begin()+pos+n); pos += n; return s;
 }
 bool enabled() { return !env("MOS_V2_SCOPE").empty() && !env("MOS_V2_DIR").empty() &&
-    (env("MOS_V2_MODE")=="seed" || env("MOS_V2_MODE")=="replay"); }
+    (env("MOS_V2_MODE")=="seed" || env("MOS_V2_MODE")=="replay" || env("MOS_V2_MODE")=="auto"); }
 void track(Program p, const char* src, const char* name, int count,
            const char* const* headers, const char* const* includes, std::uintptr_t extra, bool privateApi) {
     if (!enabled() || !p || !src || count < 0 || count > 4096 || (count && (!headers || !includes))) return;
@@ -167,7 +167,7 @@ extern "C" int nvrtcCompileProgram(Program p,int n,const char* const* opts) {
             append(key,std::to_string(s->expressions.size()));
             for(const auto& expr:s->expressions) append(key,expr);
             s->key=mos_nvrtc_cache::sha256_hex(key);
-            if(env("MOS_V2_MODE")=="replay" && read(*s)) {
+            if((env("MOS_V2_MODE")=="replay" || env("MOS_V2_MODE")=="auto") && read(*s)) {
                 s->replay=true; log("hit","key="+s->key+" names="+std::to_string(s->names.size())); return 0;
             }
         }

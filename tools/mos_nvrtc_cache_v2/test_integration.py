@@ -72,6 +72,15 @@ def parent(shim, renderer):
             p = subprocess.run([sys.executable, __file__, '--child'], env=env, text=True, capture_output=True, timeout=40)
             assert p.returncode == 0, p.stderr
             return json.loads(p.stdout), p.stderr
+        env['MOS_V2_MODE'] = 'auto'
+        first, first_log = invoke()
+        second, second_log = invoke()
+        assert first == second
+        assert first_log.count('event=compile ') == 2
+        assert first_log.count('event=stored ') == 2
+        assert second_log.count('event=hit ') == 2
+        assert 'event=compile ' not in second_log
+        env['MOS_V2_MODE'] = 'seed'
         cold, cold_log = invoke()
         env['MOS_V2_MODE'] = 'replay'
         warm, warm_log = invoke()
