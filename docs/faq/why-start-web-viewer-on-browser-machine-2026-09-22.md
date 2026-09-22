@@ -23,7 +23,7 @@ Before `npm run dev`, set `stream.config.json` for the remote Kit server:
 ```json
 "server": "140.113.214.34",
 "signalingPort": 49100,
-"mediaPort": 47998
+"mediaPort": null
 ```
 
 Kit still runs remotely in the `kit-app-template` tmux session.  Its TCP
