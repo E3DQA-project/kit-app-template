@@ -44,6 +44,10 @@ from .load_diagnostics import (
     _ReadinessGate,
     _RendererPhaseGate,
 )
+from .camera_pose import (
+    normalize_camera_rotation_handedness,
+    rotation_determinant,
+)
 from nycu.camera_conventions import get_camera_convention
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -481,6 +485,20 @@ def _apply_camera_from_json(cam: Dict[str, Any], scene_preset: str) -> bool:
             return False
 
         r, p = rot, pos
+        original_determinant = rotation_determinant(r)
+        r, repaired_reflection = normalize_camera_rotation_handedness(r)
+        if repaired_reflection:
+            omni.log.warn(
+                f"[{_EXT_ID}] CAMERA_HANDEDNESS_REPAIRED "
+                f"determinant={original_determinant:.6f} "
+                "correction=camera_local_x_reflection"
+            )
+        elif abs(original_determinant - 1.0) > 1e-4:
+            omni.log.warn(
+                f"[{_EXT_ID}] CAMERA_HANDEDNESS_UNCHANGED "
+                f"determinant={original_determinant:.6f}; "
+                "expected a proper rotation (+1) or the known Matrix-3D reflection (-1)"
+            )
         # Bake scene-orientation rotation into the camera pose so it aligns
         # with the rotated /World content (same logic as usdz_folder_browser).
         pr = _scene_preset_rot3(scene_preset)
