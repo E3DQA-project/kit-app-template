@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: LicenseRef-NvidiaProprietary
+
+[package]
+title = "E3DQA Scene Viewer Streaming"
+version = "0.1.0"
+description = "WebRTC streaming layer for the E3DQA Scene Viewer."
+keywords = ["experience", "app", "streaming"]
+template_name = "omni.streaming_configuration"
+
+[dependencies]
+"nycu.e3dqa_scene_viewer" = {}  # Keep the desktop app and its extensions unchanged.
+"omni.kit.livestream.app" = { version = "10.1.0" }
+
+[settings]
+exts."omni.kit.livestream.app".primaryStream.streamType = "webrtc"
+exts."omni.kit.livestream.app".primaryStream.publicIp = "140.113.214.34"
+exts."omni.kit.livestream.app".primaryStream.signalPort = 49100
+exts."omni.kit.livestream.app".primaryStream.streamPort = 47998
+rtx.post.aa.op = 3
+rtx.verifyDriverVersion.enabled = false
+
+[settings.app]
+fastShutdown = true
+name = "E3DQA Scene Viewer Streaming"
+renderer.resolution.height = 1080
+renderer.resolution.width = 1920
+window.height = 1080
+window.width = 1920
+
+[settings.app.extensions]
+registryEnabled = true
+supportedTargets.platform = []
+
+exclude = [
+    "omni.kit.developer.bundle",
+    "omni.kit.widget.cache_indicator",
+]
+
+[settings.app.exts]
+folders.'++' = [
+    "${app}/../exts",
+    "${app}/../apps",
+    "${app}/../extscache",
+]
+
+[settings.app.file]
+ignoreUnsavedOnExit = true

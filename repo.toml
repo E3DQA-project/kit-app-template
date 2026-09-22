@@ -116,6 +116,7 @@ publish_pip_cache = false
 # Apps to run and precache
 apps = [
     "${root}/source/apps/nycu.e3dqa_scene_viewer.kit",
+    "${root}/source/apps/nycu.e3dqa_scene_viewer_streaming.kit",
     "${root}/source/apps/nycu.mos_app.kit",
 ]
 
