@@ -2,62 +2,59 @@
 
 ## Question
 
-How do I start the E3DQA streaming app and connect to it remotely? Which URL
-should I open in a browser?
+How do I start the E3DQA streaming application and open it remotely in a
+browser?
 
 ## Answer
 
-### Start the app
+This application follows the same architecture as
+`kit-app-template-e3dqa-streaming-fix`: Kit hosts a WebRTC stream and NVIDIA's
+separate Web Viewer Sample supplies the browser page.  Kit itself does not
+serve a page on port 8011.
 
-Run the streaming entry point from the `kit-app-template` tmux session after
-activating the `pierce_base` conda environment:
+### Start Kit
+
+Use the `kit-app-template` tmux session and launch the built application
+without a local window:
 
 ```bash
+tmux attach -t kit-app-template
 cd /mnt/gen5_SSD/pierce/kit-app-template-e3dqa-web-streaming
 conda activate pierce_base
-./repo.sh launch nycu.e3dqa_scene_viewer_streaming.kit
+./repo.sh build                 # needed after changing .kit or premake5.lua
+./repo.sh launch nycu.e3dqa_scene_viewer_streaming.kit -- --no-window
 ```
 
-The normal launcher requires a completed `repo.sh build`. During the initial
-experiment, the repository's full precache was blocked before it reached the
-streaming app, so the already-downloaded Kit runtime was used directly instead:
+Wait until the log says `app ready`.  The signal server must then listen on
+TCP port `49100`:
 
 ```bash
-./_build/linux-x86_64/release/kit/kit \
-  source/apps/nycu.e3dqa_scene_viewer_streaming.kit \
-  --portable --ext-folder source/extensions --ext-folder source/apps \
-  --/app/extensions/registryEnabled=1 --/app/enableStdoutOutput=1
+ss -ltnp | rg ':49100'
 ```
 
-Wait for these log messages before connecting:
+### Open the browser client
+
+For the current experiment, the official NVIDIA Web Viewer Sample is running
+on this host.  Open this URL from a Chromium-based browser:
 
 ```text
-Started primary stream server on signal port 49100 and stream port 47998
-app ready
+http://140.113.214.34:5173/
 ```
 
-### Connect
+Choose **UI for any streaming app**.  Its local-stream configuration connects
+to `140.113.214.34:49100`, which is the running E3DQA Kit application.
 
-The present layer exposes a WebRTC signaling endpoint, not a browser page:
+### Required network ports
 
-```text
-ws://140.113.214.34:49100
-```
+- TCP `5173`: Web Viewer Sample page for this shared-host experiment.
+- TCP `49100`: Kit WebRTC signaling.
+- UDP `47998`: Kit WebRTC media.
 
-Use that endpoint and UDP media port `47998` with a compatible Omniverse
-WebRTC client. Do **not** type the WebSocket endpoint into a browser address
-bar as though it were an HTTP URL.
+If the page is hosted elsewhere, configure that Web Viewer Sample's local
+`server` field to `140.113.214.34`; the signal and media ports remain the
+same.
 
-For a directly browsable page such as `http://140.113.214.34:8011`, add the
-separate `omni.services.livestream.webrtc` extension and its HTTP transport
-configuration to the streaming layer. That service hosts NVIDIA's browser
-client UI and discovers the configured primary stream automatically. It is not
-enabled in the current minimal layer.
+### Stop the experiment
 
-### Network checklist
-
-- TCP `49100`: WebRTC signaling.
-- UDP `47998`: WebRTC media.
-- If the browser-client service is enabled: TCP `8011` (or the configured HTTP
-  port).
-- The firewall/NAT must permit the relevant ports to the host.
+In the `kit-app-template` tmux pane, press `Ctrl-C` to stop Kit.  In the
+`web-viewer-sample` tmux pane, press `Ctrl-C` to stop the Vite server.

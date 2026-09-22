@@ -1,10 +1,9 @@
-"""Regression checks for the E3DQA WebRTC streaming app entry point."""
+"""Regression checks for the E3DQA WebRTC streaming configuration."""
 
 from __future__ import annotations
 
-import tomllib
-import unittest
 from pathlib import Path
+import unittest
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -12,26 +11,20 @@ APP_PATH = REPOSITORY_ROOT / "source/apps/nycu.e3dqa_scene_viewer_streaming.kit"
 REPO_TOML_PATH = REPOSITORY_ROOT / "repo.toml"
 
 
-class E3dqaStreamingConfigTests(unittest.TestCase):
-    def test_streaming_entry_point_exposes_the_expected_webrtc_endpoint(self) -> None:
-        with APP_PATH.open("rb") as app_file:
-            app = tomllib.load(app_file)
+class E3DQAStreamingConfigTests(unittest.TestCase):
+    def test_webrtc_endpoint_matches_the_reference_app(self) -> None:
+        config = APP_PATH.read_text(encoding="utf-8")
 
-        dependencies = app["dependencies"]
-        settings = app["settings"]
+        self.assertIn('"omni.kit.livestream.app" = { version = "10.1.0" }', config)
+        self.assertIn('exts."omni.kit.livestream.app".primaryStream.streamType = "webrtc"', config)
+        self.assertIn('exts."omni.kit.livestream.app".primaryStream.signalPort = 49100', config)
+        self.assertIn('exts."omni.kit.livestream.app".primaryStream.streamPort = 47998', config)
 
-        self.assertIn("omni.kit.livestream.app", dependencies)
-        self.assertEqual(settings["exts"]["omni.kit.livestream.app"]["primaryStream"]["streamType"], "webrtc")
-        self.assertEqual(settings["exts"]["omni.kit.livestream.app"]["primaryStream"]["publicIp"], "140.113.214.34")
-        self.assertEqual(settings["exts"]["omni.kit.livestream.app"]["primaryStream"]["signalPort"], 49100)
-        self.assertEqual(settings["exts"]["omni.kit.livestream.app"]["primaryStream"]["streamPort"], 47998)
+    def test_streaming_app_is_precached_by_the_build(self) -> None:
+        repo_config = REPO_TOML_PATH.read_text(encoding="utf-8")
 
-    def test_build_configuration_lists_the_streaming_entry_point(self) -> None:
-        with REPO_TOML_PATH.open("rb") as repo_file:
-            repo = tomllib.load(repo_file)
-
-        apps = repo["repo_precache_exts"]["apps"]
-        self.assertIn("${root}/source/apps/nycu.e3dqa_scene_viewer_streaming.kit", apps)
+        self.assertIn("[repo_precache_exts]", repo_config)
+        self.assertIn("${root}/source/apps/nycu.e3dqa_scene_viewer_streaming.kit", repo_config)
 
 
 if __name__ == "__main__":

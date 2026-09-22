@@ -17,6 +17,7 @@ repo_build.prebuild_copy {
 -- Apps: for each app generate batch files and a project based on kit files (e.g. my_name.my_app.kit)
 
 define_app("nycu.e3dqa_scene_viewer.kit")
+define_app("nycu.e3dqa_scene_viewer_streaming.kit")
 define_app("nycu.mos_app.kit")
 
 -- Extensions
