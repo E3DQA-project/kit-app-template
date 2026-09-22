@@ -262,7 +262,7 @@ type_ordering = [
 ########################################################################################################################
 [repo_launch_app]
 enabled = true
-entry_point = "${root}/tools/repoman/launch.py:setup_repo_tool"
+entry_point = "${root}/tools/repoman/mos_launch.py:setup_repo_tool"
 
 
 ########################################################################################################################

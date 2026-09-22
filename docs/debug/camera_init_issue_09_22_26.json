@@ -1,0 +1,49 @@
+{
+    "abnormal_samples":[
+        {
+            "id": "index_0014",
+            "camera_init_view": "Opposite from default & Upside down",
+            "movement_left_right": "inverted",
+            "movement_front_rear": "inverted",
+            "camera_yaw": "inverted",
+            "camera_roll": "normal",
+            "entire_scene": "left_right_mirrored"
+        },
+        {
+            "id": "index_0030",
+            "camera_init_view": "Opposite from default & Upside down",
+            "movement_left_right": "inverted",
+            "movement_front_rear": "inverted",
+            "camera_yaw": "inverted",
+            "camera_roll": "normal",
+            "entire_scene": "left_right_mirrored"
+        },
+        {
+            "id": "index_0088",
+            "camera_init_view": "Opposite from default & Upside down",
+            "movement_left_right": "inverted",
+            "movement_front_rear": "inverted",
+            "camera_yaw": "inverted",
+            "camera_roll": "normal",
+            "entire_scene": "left_right_mirrored"
+        },
+        {
+            "id": "index_0106",
+            "camera_init_view": "Opposite from default & Upside down",
+            "movement_left_right": "inverted",
+            "movement_front_rear": "inverted",
+            "camera_yaw": "inverted",
+            "camera_roll": "normal",
+            "entire_scene": "left_right_mirrored"
+        },        
+        {
+            "id": "index_0114",
+            "camera_init_view": "Opposite from default & Upside down",
+            "movement_left_right": "inverted",
+            "movement_front_rear": "inverted",
+            "camera_yaw": "inverted",
+            "camera_roll": "normal",
+            "entire_scene": "left_right_mirrored"
+        }
+    ]
+}

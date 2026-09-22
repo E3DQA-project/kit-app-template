@@ -94,14 +94,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--app-command', type=Path, required=True)
     parser.add_argument('kit_args', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
-    scene_list = resolve_scene_list(ROOT, args.kit_args)
+    kit_args = args.kit_args[1:] if args.kit_args[:1] == ['--'] else args.kit_args
+    scene_list = resolve_scene_list(ROOT, kit_args)
     renderer = renderer_library(ROOT)
     shim = build_shim(ROOT, CACHE_ROOT, renderer)
     scope = scope_digest(scene_list)
     cache_dir = CACHE_ROOT / 'artifacts' / scope
     cache_dir.mkdir(parents=True, exist_ok=True)
     environment = build_environment(ROOT, cache_dir, scene_list, shim, renderer, os.environ)
-    return subprocess.run([str(args.app_command), *args.kit_args], cwd=ROOT, env=environment).returncode
+    return subprocess.run([str(args.app_command), *kit_args], cwd=ROOT, env=environment).returncode
 
 
 if __name__ == '__main__':
