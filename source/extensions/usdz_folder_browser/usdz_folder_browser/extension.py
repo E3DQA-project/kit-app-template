@@ -25,7 +25,11 @@ import omni.log
 import omni.usd
 
 from .camera_patterns import default_if_blank
-from nycu.camera_conventions import get_camera_convention
+from nycu.camera_conventions import (
+    get_camera_convention,
+    normalize_camera_rotation_handedness,
+    rotation_determinant,
+)
 
 
 # ── Persistent settings keys ──────────────────────────────────────────────────
@@ -247,6 +251,18 @@ def _apply_camera(
             return False
 
         r, p = rot, pos
+        r, repaired_reflection = normalize_camera_rotation_handedness(r)
+        if repaired_reflection:
+            omni.log.info(
+                "CAMERA_HANDEDNESS_REPAIRED "
+                f"determinant={rotation_determinant(rot):.6f} "
+                "correction=camera_local_x_reflection"
+            )
+        elif abs(rotation_determinant(rot) - 1.0) > 1e-4:
+            omni.log.warn(
+                "CAMERA_HANDEDNESS_UNCHANGED "
+                f"determinant={rotation_determinant(rot):.6f}"
+            )
         if rot_is_w2c:
             r = _T(r)
         if cv_axes:

@@ -88,12 +88,12 @@ class DefaultLaunchTests(unittest.TestCase):
 
     def test_environment_is_auto_mode_and_strips_inherited_preload(self):
         root = self.make_root(default_list='default.json')
-        list_path = self.root / 'source/data/mos_scenes.json'
+        scope = module.scope_digest(self.root / 'source/data/mos_scenes.json')
         cache_root = self.root / 'cache'
         shim = self.root / 'shim.so'
         renderer = self.root / 'renderer.so'
         env = module.build_environment(
-            root, cache_root, list_path, shim, renderer,
+            root, cache_root, scope, shim, renderer,
             {'LD_PRELOAD': '/unrelated.so', 'MOS_V2_MODE': 'replay', 'KEEP': 'yes'},
         )
         self.assertEqual(env['MOS_V2_MODE'], 'auto')
@@ -108,6 +108,12 @@ class DefaultLaunchTests(unittest.TestCase):
                 root, ['--/exts/nycu.mos_app_extension/sceneListPath=/missing.json']
             )
 
+
+    def test_explicit_cache_scope_does_not_require_a_mos_scene_list(self):
+        self.assertEqual(
+            module.resolve_cache_scope(self.root, [], 'e3dqa-scene-viewer-v1'),
+            'e3dqa-scene-viewer-v1',
+        )
 
 class RepoLaunchRoutingTests(unittest.TestCase):
     def setUp(self):

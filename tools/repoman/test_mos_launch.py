@@ -46,12 +46,12 @@ def load_module():
     return module
 
 
-class MosLaunchTests(unittest.TestCase):
+class CachedLaunchTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
         self.build = Path(self.id().replace(".", "_"))
 
-    def test_only_local_mos_is_wrapped(self):
+    def test_active_local_apps_are_wrapped_with_app_specific_cache_policy(self):
         mos = self.build / "nycu.mos_app.kit.sh"
         viewer = self.build / "nycu.e3dqa_scene_viewer.kit.sh"
         with patch.object(Path, "is_file", return_value=True), patch.object(self.module.upstream, "_run_process") as run:
@@ -62,7 +62,10 @@ class MosLaunchTests(unittest.TestCase):
         self.assertEqual(mos_command[:3], [sys.executable, "/repo/tools/mos_nvrtc_cache_v2/default_launch.py", "--app-command"])
         self.assertEqual(mos_command[3], str(mos))
         self.assertIn("--/exts/nycu.mos_app_extension/sceneListPath=/repo/source/data/mos_scenes.json", mos_command)
-        self.assertEqual(viewer_command, [str(viewer)])
+        self.assertEqual(viewer_command[:3], [sys.executable, "/repo/tools/mos_nvrtc_cache_v2/default_launch.py", "--cache-scope"])
+        self.assertEqual(viewer_command[3], "e3dqa-scene-viewer-v1")
+        self.assertEqual(viewer_command[4:6], ["--cache-root", "/mnt/gen5_SSD/pierce/e3dqa-scene-viewer-nvrtc-cache-v2"])
+        self.assertEqual(viewer_command[6:8], ["--app-command", str(viewer)])
 
     def test_menu_selection_delegates_to_upstream_without_parsing_kit_toml(self):
         with patch.object(self.module.upstream, "select_kit", return_value="nycu.e3dqa_scene_viewer.kit") as select:
@@ -71,6 +74,14 @@ class MosLaunchTests(unittest.TestCase):
         self.assertEqual(chosen, "nycu.e3dqa_scene_viewer.kit")
         select.assert_called_once_with(Path("build/apps"), {})
 
+
+
+    def test_no_nvrtc_cache_keeps_scene_viewer_direct(self):
+        viewer = self.build / "nycu.e3dqa_scene_viewer.kit.sh"
+        with patch.object(Path, "is_file", return_value=True), patch.object(self.module.upstream, "_run_process") as run:
+            self.module.launch_kit("nycu.e3dqa_scene_viewer.kit", self.build, {}, [], no_nvrtc_cache=True)
+
+        self.assertEqual(run.call_args.args[0], [str(viewer)])
 
 if __name__ == "__main__":
     unittest.main()

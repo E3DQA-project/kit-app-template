@@ -1,4 +1,4 @@
-"""Keep the upstream launch tool intact while enabling the MOS NVRTC cache."""
+"""Keep the upstream launcher intact while enabling per-app NVRTC caches."""
 import argparse
 import platform
 import sys
@@ -9,6 +9,9 @@ from omni.repo.kit_tools import launch as upstream
 
 
 MOS_APP = "nycu.mos_app.kit"
+SCENE_VIEWER_APP = "nycu.e3dqa_scene_viewer.kit"
+SCENE_VIEWER_CACHE_ROOT = "/mnt/gen5_SSD/pierce/e3dqa-scene-viewer-nvrtc-cache-v2"
+SCENE_VIEWER_CACHE_SCOPE = "e3dqa-scene-viewer-v1"
 
 
 def choose_app(app_name: Optional[str], target_directory: Path, config: dict) -> str:
@@ -34,13 +37,20 @@ def launch_kit(
         )
 
     command = [str(app_build_path), *extra_args]
-    if app_name == MOS_APP and not no_nvrtc_cache:
-        command.append(
-            "--/exts/nycu.mos_app_extension/sceneListPath="
-            + upstream.resolve_tokens("${root}/source/data/mos_scenes.json")
-        )
+    if app_name in (MOS_APP, SCENE_VIEWER_APP) and not no_nvrtc_cache:
         wrapper = Path(upstream.resolve_tokens("${root}/tools/mos_nvrtc_cache_v2/default_launch.py"))
-        command = [sys.executable, str(wrapper), "--app-command", command[0], "--", *command[1:]]
+        if app_name == MOS_APP:
+            command.append(
+                "--/exts/nycu.mos_app_extension/sceneListPath="
+                + upstream.resolve_tokens("${root}/source/data/mos_scenes.json")
+            )
+            cache_args: List[str] = []
+        else:
+            cache_args = [
+                "--cache-scope", SCENE_VIEWER_CACHE_SCOPE,
+                "--cache-root", SCENE_VIEWER_CACHE_ROOT,
+            ]
+        command = [sys.executable, str(wrapper), *cache_args, "--app-command", command[0], "--", *command[1:]]
 
     upstream._run_process(command, exit_on_error=False)
 
@@ -49,12 +59,12 @@ def add_cache_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--no-nvrtc-cache",
         action="store_true",
-        help="Launch local MOS without the default NVRTC cache wrapper.",
+        help="Launch a local cached app without the default NVRTC cache wrapper.",
     )
 
 
 def setup_repo_tool(parser: argparse.ArgumentParser, config: Dict) -> Optional[Callable]:
-    """Register upstream launch UX plus a local-MOS-only cache adapter."""
+    """Register upstream launch UX plus active-app NVRTC cache adapters."""
     parser.description = "Application-specific tooling for launching local applications and containerized applications."
     upstream.add_container_arg(parser)
     add_cache_arg(parser)

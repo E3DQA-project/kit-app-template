@@ -44,11 +44,11 @@ from .load_diagnostics import (
     _ReadinessGate,
     _RendererPhaseGate,
 )
-from .camera_pose import (
+from nycu.camera_conventions import (
+    get_camera_convention,
     normalize_camera_rotation_handedness,
     rotation_determinant,
 )
-from nycu.camera_conventions import get_camera_convention
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
