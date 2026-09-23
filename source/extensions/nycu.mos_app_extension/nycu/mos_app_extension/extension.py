@@ -44,7 +44,7 @@ from .load_diagnostics import (
     _ReadinessGate,
     _RendererPhaseGate,
 )
-from .score_scale import normalize_score
+from .score_scale import score_from_slider_value
 from .ui_theme import (
     PARTICIPANT_ACCENT,
     TEXT_HINT,
@@ -1593,7 +1593,7 @@ class MosAppExtension(omni.ext.IExt):
 
                 # One row per metric
                 for key, label in _METRICS:
-                    model = ui.SimpleFloatModel(3.0)
+                    model = ui.SimpleIntModel(6)
                     self._score_models[key] = model
 
                     with ui.VStack(spacing=4, height=_SCORE_ROW_H):
@@ -1611,9 +1611,7 @@ class MosAppExtension(omni.ext.IExt):
                                 alignment=ui.Alignment.CENTER,
                                 style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
                             )
-                        with ui.Placer(
-                            width=_SCORE_SLIDER_W, height=18, stable_size=True
-                        ):
+                        with ui.ZStack(width=_SCORE_SLIDER_W, height=18):
                             for index, step_label in enumerate(_SLIDER_STEPS):
                                 with ui.Placer(
                                     offset_x=ui.Pixel(_score_anchor_offset(index))
@@ -1624,12 +1622,10 @@ class MosAppExtension(omni.ext.IExt):
                                         alignment=ui.Alignment.CENTER,
                                         style={"color": TEXT_HINT, "font_size": _SCORE_FOOTER_SIZE},
                                     )
-                        ui.FloatSlider(
+                        ui.IntSlider(
                             model=model,
-                            min=1.0,
-                            max=5.0,
-                            step=0.5,
-                            precision=1,
+                            min=2,
+                            max=10,
                             width=_SCORE_SLIDER_W,
                             height=_SCORE_SLIDER_H,
                             style=_SLIDER_STYLE,
@@ -1637,13 +1633,10 @@ class MosAppExtension(omni.ext.IExt):
 
                         self._score_value_labels[key] = value_lbl
 
-                        def _make_cb(value: ui.Label, m: ui.SimpleFloatModel):
+                        def _make_cb(value: ui.Label, m: ui.SimpleIntModel):
                             def _cb(_model: ui.AbstractValueModel) -> None:
                                 try:
-                                    raw = m.get_value_as_float()
-                                    score = normalize_score(raw)
-                                    if score != raw:
-                                        m.set_value(score)
+                                    score = score_from_slider_value(m.get_value_as_int())
                                     value.text = f"{score:.1f}"
                                 except Exception:
                                     pass
@@ -1722,7 +1715,7 @@ class MosAppExtension(omni.ext.IExt):
     def _reset_sliders(self) -> None:
         for model in self._score_models.values():
             try:
-                model.set_value(3.0)
+                model.set_value(6)
             except Exception:
                 pass
 
@@ -1766,7 +1759,7 @@ class MosAppExtension(omni.ext.IExt):
 
     def _collect_scores(self) -> Dict[str, float]:
         return {
-            key: normalize_score(self._score_models[key].get_value_as_float())
+            key: score_from_slider_value(self._score_models[key].get_value_as_int())
             for key, _ in _METRICS
             if key in self._score_models
         }

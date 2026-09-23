@@ -16,3 +16,17 @@ def normalize_score(value: Any) -> float:
         score = 3.0
     score = max(1.0, min(5.0, score))
     return floor(score * 2 + 0.5) / 2
+
+
+def score_from_slider_value(value: Any) -> float:
+    """Convert the slider's integer 2–10 domain to a MOS half-score."""
+    try:
+        slider_value = int(value)
+    except (TypeError, ValueError):
+        slider_value = 6
+    return normalize_score(slider_value / 2)
+
+
+def slider_value_from_score(value: Any) -> int:
+    """Convert a MOS score to the slider's integer 2–10 domain."""
+    return int(normalize_score(value) * 2)
