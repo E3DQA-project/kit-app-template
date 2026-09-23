@@ -97,6 +97,10 @@ guide.grid.visible = false
 app.viewport.currentTool = "navigation"
 exts."omni.kit.viewport.navigation.core".activeOperation = "fly"
 exts."omni.kit.viewport.navigation.camera_manipulator".defaultOperation = "fly"
+# DS4 right-stick look drift is common enough to need more margin than Kit's
+# 0.10 default.  This affects look input only; fly controls retain their
+# separate dead-zone.
+exts."omni.kit.manipulator.camera".gamePad.look.deadZone = 0.20
 renderer.asyncInit = true # Don't block while renderer inits
 rtx.ecoMode.enabled = true
 rtx.hydra.mdlMaterialWarmup = true # start loading the MDL shaders needed before any delegate is actually created.
