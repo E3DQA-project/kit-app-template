@@ -132,14 +132,25 @@ _SCORE_FONT_SIZE   = 22
 _SCORE_HEADER_SIZE = 22
 _SCORE_FOOTER_SIZE = 16
 _SCORE_ROW_H       = 76
+_SCORE_SLIDER_W    = 680
 _SCORE_SLIDER_H    = 28
 _SCORE_VALUE_W     = 52
+_SCORE_ANCHOR_W    = 140
 _SCORE_BTN_W       = 180
 _SCORE_BTN_H       = 48
 
 _SLIDER_STYLE = {**slider_style(),
     "draw_mode": ui.SliderDrawMode.HANDLE,
 }
+
+
+def _score_anchor_offset(index: int) -> float:
+    """Left offset that centers the five anchors over scores 1–5."""
+    if index == 0:
+        return 0.0
+    if index == len(_SLIDER_STEPS) - 1:
+        return float(_SCORE_SLIDER_W - _SCORE_ANCHOR_W)
+    return _SCORE_SLIDER_W * index / (len(_SLIDER_STEPS) - 1) - _SCORE_ANCHOR_W / 2
 
 
 # ── State machine ──────────────────────────────────────────────────────────────
@@ -1600,21 +1611,26 @@ class MosAppExtension(omni.ext.IExt):
                                 alignment=ui.Alignment.CENTER,
                                 style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
                             )
-                        with ui.HStack(height=18):
-                            for step_label in _SLIDER_STEPS:
-                                ui.Label(
-                                    step_label,
-                                    width=ui.Fraction(1),
-                                    alignment=ui.Alignment.CENTER,
-                                    style={"color": TEXT_HINT, "font_size": _SCORE_FOOTER_SIZE},
-                                )
+                        with ui.Placer(
+                            width=_SCORE_SLIDER_W, height=18, stable_size=True
+                        ):
+                            for index, step_label in enumerate(_SLIDER_STEPS):
+                                with ui.Placer(
+                                    offset_x=ui.Pixel(_score_anchor_offset(index))
+                                ):
+                                    ui.Label(
+                                        step_label,
+                                        width=_SCORE_ANCHOR_W,
+                                        alignment=ui.Alignment.CENTER,
+                                        style={"color": TEXT_HINT, "font_size": _SCORE_FOOTER_SIZE},
+                                    )
                         ui.FloatSlider(
                             model=model,
                             min=1.0,
                             max=5.0,
                             step=0.5,
                             precision=1,
-                            width=ui.Fraction(1),
+                            width=_SCORE_SLIDER_W,
                             height=_SCORE_SLIDER_H,
                             style=_SLIDER_STYLE,
                         )

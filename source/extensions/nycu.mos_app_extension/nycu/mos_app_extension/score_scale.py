@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from math import floor, isfinite
 from typing import Any
 
 
@@ -11,5 +12,7 @@ def normalize_score(value: Any) -> float:
         score = float(value)
     except (TypeError, ValueError):
         score = 3.0
+    if not isfinite(score):
+        score = 3.0
     score = max(1.0, min(5.0, score))
-    return round(score * 2) / 2
+    return floor(score * 2 + 0.5) / 2

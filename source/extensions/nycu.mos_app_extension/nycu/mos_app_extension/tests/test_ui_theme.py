@@ -81,7 +81,8 @@ class MosUiThemeTests(unittest.TestCase):
         self.assertIn("ui.SimpleFloatModel(3.0)", source)
         self.assertIn("ui.FloatSlider(", source)
         self.assertIn("step=0.5", source)
-        self.assertIn("for step_label in _SLIDER_STEPS", source)
+        self.assertIn("for index, step_label in enumerate(_SLIDER_STEPS)", source)
+        self.assertIn("offset_x=ui.Pixel(_score_anchor_offset(index))", source)
         self.assertNotIn("ui.IntSlider(\n                                model=model", source)
 
 
