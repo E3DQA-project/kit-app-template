@@ -44,6 +44,7 @@ from .load_diagnostics import (
     _ReadinessGate,
     _RendererPhaseGate,
 )
+from .score_scale import normalize_score
 from .ui_theme import (
     PARTICIPANT_ACCENT,
     TEXT_HINT,
@@ -126,16 +127,13 @@ _PROMPT_BTN_H      = 44
 
 # Scoring panel.
 _SCORE_WIN_WIDTH   = 760
-_SCORE_WIN_HEIGHT  = 540
+_SCORE_WIN_HEIGHT  = 680
 _SCORE_FONT_SIZE   = 22
 _SCORE_HEADER_SIZE = 22
 _SCORE_FOOTER_SIZE = 16
-_SCORE_ROW_H       = 44
-_SCORE_LABEL_W     = 360
-_SCORE_SLIDER_W    = 180
+_SCORE_ROW_H       = 76
 _SCORE_SLIDER_H    = 28
-_SCORE_VALUE_W     = 36
-_SCORE_STEP_W      = 130
+_SCORE_VALUE_W     = 52
 _SCORE_BTN_W       = 180
 _SCORE_BTN_H       = 48
 
@@ -678,7 +676,6 @@ class MosAppExtension(omni.ext.IExt):
         self._continue_btn = None
         self._status_lbl = None
         self._score_models = {}
-        self._score_step_labels = {}
         self._score_value_labels = {}
         self._scene_info_lbl = None
         self._scoring_hint_lbl = None
@@ -1585,64 +1582,59 @@ class MosAppExtension(omni.ext.IExt):
 
                 # One row per metric
                 for key, label in _METRICS:
-                    model = ui.SimpleIntModel(3)
+                    model = ui.SimpleFloatModel(3.0)
                     self._score_models[key] = model
 
-                    with ui.HStack(spacing=12, height=_SCORE_ROW_H):
-                        ui.Label(
-                            label,
-                            width=_SCORE_LABEL_W,
-                            height=_SCORE_ROW_H,
-                            word_wrap=False,
-                            alignment=ui.Alignment.LEFT_CENTER,
-                            style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
-                        )
-                        with ui.VStack(width=_SCORE_SLIDER_W, height=_SCORE_ROW_H):
-                            ui.Spacer()
-                            ui.IntSlider(
-                                model=model,
-                                min=1,
-                                max=5,
-                                width=_SCORE_SLIDER_W,
-                                height=_SCORE_SLIDER_H,
-                                style=_SLIDER_STYLE,
+                    with ui.VStack(spacing=4, height=_SCORE_ROW_H):
+                        with ui.HStack(height=24):
+                            ui.Label(
+                                label,
+                                width=ui.Fraction(1),
+                                word_wrap=False,
+                                alignment=ui.Alignment.LEFT_CENTER,
+                                style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
                             )
-                            ui.Spacer()
-                        value_lbl = ui.Label(
-                            "3",
-                            width=_SCORE_VALUE_W,
-                            height=_SCORE_ROW_H,
-                            alignment=ui.Alignment.CENTER,
-                            style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
+                            value_lbl = ui.Label(
+                                "3.0",
+                                width=_SCORE_VALUE_W,
+                                alignment=ui.Alignment.CENTER,
+                                style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
+                            )
+                        with ui.HStack(height=18):
+                            for step_label in _SLIDER_STEPS:
+                                ui.Label(
+                                    step_label,
+                                    width=ui.Fraction(1),
+                                    alignment=ui.Alignment.CENTER,
+                                    style={"color": TEXT_HINT, "font_size": _SCORE_FOOTER_SIZE},
+                                )
+                        ui.FloatSlider(
+                            model=model,
+                            min=1.0,
+                            max=5.0,
+                            step=0.5,
+                            precision=1,
+                            width=ui.Fraction(1),
+                            height=_SCORE_SLIDER_H,
+                            style=_SLIDER_STYLE,
                         )
-                        step_lbl = ui.Label(
-                            _SLIDER_STEPS[2],  # "Average" = index 2 = value 3
-                            width=_SCORE_STEP_W,
-                            height=_SCORE_ROW_H,
-                            alignment=ui.Alignment.LEFT_CENTER,
-                            style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
-                        )
-                        self._score_step_labels[key] = step_lbl
+
                         self._score_value_labels[key] = value_lbl
 
-                        def _make_cb(
-                            step: ui.Label,
-                            value: ui.Label,
-                            m: ui.SimpleIntModel,
-                        ):
+                        def _make_cb(value: ui.Label, m: ui.SimpleFloatModel):
                             def _cb(_model: ui.AbstractValueModel) -> None:
                                 try:
-                                    v = max(1, min(5, int(m.get_value_as_int())))
-                                    step.text = _SLIDER_STEPS[v - 1]
-                                    value.text = str(v)
+                                    raw = m.get_value_as_float()
+                                    score = normalize_score(raw)
+                                    if score != raw:
+                                        m.set_value(score)
+                                    value.text = f"{score:.1f}"
                                 except Exception:
                                     pass
                             return _cb
 
                         try:
-                            model.add_value_changed_fn(
-                                _make_cb(step_lbl, value_lbl, model)
-                            )
+                            model.add_value_changed_fn(_make_cb(value_lbl, model))
                         except Exception:
                             pass
 
@@ -1714,7 +1706,7 @@ class MosAppExtension(omni.ext.IExt):
     def _reset_sliders(self) -> None:
         for model in self._score_models.values():
             try:
-                model.set_value(3)
+                model.set_value(3.0)
             except Exception:
                 pass
 
@@ -1756,9 +1748,9 @@ class MosAppExtension(omni.ext.IExt):
 
     # ── Score persistence ──────────────────────────────────────────────────────
 
-    def _collect_scores(self) -> Dict[str, int]:
+    def _collect_scores(self) -> Dict[str, float]:
         return {
-            key: max(1, min(5, int(self._score_models[key].get_value_as_int())))
+            key: normalize_score(self._score_models[key].get_value_as_float())
             for key, _ in _METRICS
             if key in self._score_models
         }

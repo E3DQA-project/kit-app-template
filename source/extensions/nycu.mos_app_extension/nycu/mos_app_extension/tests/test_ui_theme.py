@@ -75,6 +75,15 @@ class MosUiThemeTests(unittest.TestCase):
         self.assertIn('"Next  >"', source)
         self.assertNotIn('"Next  ▶"', source)
 
+    def test_scoring_ui_uses_float_half_step_controls_and_five_anchors(self):
+        source = EXTENSION_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("ui.SimpleFloatModel(3.0)", source)
+        self.assertIn("ui.FloatSlider(", source)
+        self.assertIn("step=0.5", source)
+        self.assertIn("for step_label in _SLIDER_STEPS", source)
+        self.assertNotIn("ui.IntSlider(\n                                model=model", source)
+
 
 if __name__ == "__main__":
     unittest.main()
