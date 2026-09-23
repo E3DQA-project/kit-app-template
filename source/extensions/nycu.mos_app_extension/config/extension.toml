@@ -13,6 +13,7 @@ repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
 "omni.kit.commands" = {}
 "omni.kit.viewport.utility" = {}
 "nycu.camera_conventions" = {}
+"nycu.gamepad_look_fix" = {}
 
 [settings]
 

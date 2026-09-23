@@ -1,0 +1,12 @@
+[package]
+title = "NYCU Gamepad Look Fix"
+version = "0.1.0"
+description = "Avoid repeated scaling of retained Kit gamepad look components."
+category = "Library"
+keywords = ["gamepad", "camera", "navigation"]
+
+[dependencies]
+"omni.kit.manipulator.camera" = {}
+
+[[python.module]]
+name = "nycu.gamepad_look_fix"

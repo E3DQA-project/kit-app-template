@@ -4,8 +4,6 @@ import carb.settings
 import omni.ext
 import omni.ui as ui
 
-from .gamepad_fix import install_gamepad_look_fix, uninstall_gamepad_look_fix
-
 
 CAM_MOVE_VELOCITY = "/persistent/app/viewport/camMoveVelocity"
 CAM_VELOCITY_MIN = "/persistent/app/viewport/camVelocityMin"
@@ -34,7 +32,6 @@ def _safe_get_float(settings: carb.settings.ISettings, path: str, fallback: floa
 
 class CameraControlsExtension(omni.ext.IExt):
     def on_startup(self, _ext_id: str) -> None:
-        install_gamepad_look_fix()
         self._settings = carb.settings.get_settings()
         self._window = ui.Window("Camera Controls", width=420, height=220)
         self._status = None
@@ -43,7 +40,6 @@ class CameraControlsExtension(omni.ext.IExt):
         self._build_ui()
 
     def on_shutdown(self) -> None:
-        uninstall_gamepad_look_fix()
         self._status = None
         self._window = None
         self._settings = None

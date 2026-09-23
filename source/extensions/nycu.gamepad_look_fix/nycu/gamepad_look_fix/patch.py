@@ -28,27 +28,27 @@ def install_gamepad_look_fix() -> None:
     from omni.kit.manipulator.camera.gamepad import GamePadController
 
     original = getattr(GamePadController, _APPLY_EVENTS)
-    if hasattr(original, "_e3dqa_original"):
+    if hasattr(original, "_nycu_original"):
         return
 
     async def apply_events_with_unscaled_state(self):
         try:
             restore_unscaled_look_state(self)
         except (AttributeError, KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
-            if not getattr(self, "_e3dqa_fix_warning_logged", False):
-                carb.log_warn(f"E3DQA gamepad look fix could not inspect Kit state: {exc}")
-                self._e3dqa_fix_warning_logged = True
+            if not getattr(self, "_nycu_fix_warning_logged", False):
+                carb.log_warn(f"NYCU gamepad look fix could not inspect Kit state: {exc}")
+                self._nycu_fix_warning_logged = True
         await original(self)
 
-    apply_events_with_unscaled_state._e3dqa_original = original
+    apply_events_with_unscaled_state._nycu_original = original
     setattr(GamePadController, _APPLY_EVENTS, apply_events_with_unscaled_state)
-    carb.log_info("E3DQA gamepad look fix installed")
+    carb.log_info("NYCU gamepad look fix installed")
 
 
 def uninstall_gamepad_look_fix() -> None:
     from omni.kit.manipulator.camera.gamepad import GamePadController
 
     current = getattr(GamePadController, _APPLY_EVENTS)
-    original = getattr(current, "_e3dqa_original", None)
+    original = getattr(current, "_nycu_original", None)
     if original is not None:
         setattr(GamePadController, _APPLY_EVENTS, original)

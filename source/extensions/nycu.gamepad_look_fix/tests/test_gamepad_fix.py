@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 
 
-_MODULE_PATH = Path(__file__).resolve().parents[1] / "camera_controls" / "gamepad_fix.py"
+_MODULE_PATH = Path(__file__).resolve().parents[1] / "nycu" / "gamepad_look_fix" / "patch.py"
 _SPEC = importlib.util.spec_from_file_location("gamepad_fix", _MODULE_PATH)
 _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
