@@ -10,6 +10,7 @@ repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"
 
 [dependencies]
 "omni.kit.uiapp" = {}
+"omni.kit.manipulator.camera" = {}
 "omni.kit.viewport.menubar.camera" = { optional = true }
 
 [[python.module]]
