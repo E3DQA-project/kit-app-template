@@ -44,6 +44,17 @@ from .load_diagnostics import (
     _ReadinessGate,
     _RendererPhaseGate,
 )
+from .ui_theme import (
+    PARTICIPANT_ACCENT,
+    TEXT_HINT,
+    TEXT_MUTED,
+    TEXT_PRIMARY,
+    modal_frame_style,
+    modal_window_flags,
+    primary_button_style,
+    slider_style,
+    text_field_style,
+)
 from nycu.camera_conventions import (
     get_camera_convention,
     normalize_camera_rotation_handedness,
@@ -128,8 +139,7 @@ _SCORE_STEP_W      = 130
 _SCORE_BTN_W       = 180
 _SCORE_BTN_H       = 48
 
-_SLIDER_STYLE = {
-    "color": 0x00000000,  # hide centered value overlay on the track
+_SLIDER_STYLE = {**slider_style(),
     "draw_mode": ui.SliderDrawMode.HANDLE,
 }
 
@@ -840,27 +850,32 @@ class MosAppExtension(omni.ext.IExt):
             "Participant",
             width=_PROMPT_WIN_WIDTH,
             height=_PROMPT_WIN_HEIGHT,
-            flags=ui.WINDOW_FLAGS_NO_SCROLLBAR | ui.WINDOW_FLAGS_NO_DOCKING,
+            flags=modal_window_flags(ui),
         )
         self._name_model = ui.SimpleStringModel("")
+        self._prompt_win.frame.set_style(modal_frame_style())
         with self._prompt_win.frame:
             with ui.VStack(spacing=16):
                 ui.Label(
+                    "Participant",
+                    style={"color": TEXT_PRIMARY, "font_size": 18},
+                )
+                ui.Label(
                     "Enter your name to begin the evaluation session:",
                     word_wrap=True,
-                    style={"font_size": _PROMPT_FONT_SIZE},
+                    style={"color": TEXT_PRIMARY, "font_size": _PROMPT_FONT_SIZE},
                 )
                 with ui.HStack(spacing=10, height=_PROMPT_FIELD_H + 4):
                     ui.Label(
                         "Name:",
                         width=_PROMPT_LABEL_W,
-                        style={"font_size": _PROMPT_FONT_SIZE},
+                        style={"color": TEXT_PRIMARY, "font_size": _PROMPT_FONT_SIZE},
                     )
                     ui.StringField(
                         model=self._name_model,
                         width=ui.Fraction(1),
                         height=_PROMPT_FIELD_H,
-                        style={"font_size": _PROMPT_FONT_SIZE},
+                        style={"font_size": _PROMPT_FONT_SIZE, **text_field_style()},
                     )
                 with ui.HStack(spacing=10, height=_PROMPT_BTN_H + 8):
                     ui.Spacer()
@@ -868,7 +883,7 @@ class MosAppExtension(omni.ext.IExt):
                         "Continue",
                         width=_PROMPT_BTN_W,
                         height=_PROMPT_BTN_H,
-                        style={"font_size": _PROMPT_FONT_SIZE},
+                        style={"font_size": _PROMPT_FONT_SIZE, **primary_button_style()},
                         clicked_fn=self._on_continue,
                     )
                     ui.Spacer()
@@ -1548,8 +1563,9 @@ class MosAppExtension(omni.ext.IExt):
             width=_SCORE_WIN_WIDTH,
             height=_SCORE_WIN_HEIGHT,
             visible=False,
-            flags=ui.WINDOW_FLAGS_NO_SCROLLBAR | ui.WINDOW_FLAGS_NO_DOCKING,
+            flags=modal_window_flags(ui),
         )
+        self._scoring_win.frame.set_style(modal_frame_style())
         self._score_models      = {}
         self._score_step_labels = {}
         self._score_value_labels = {}
@@ -1558,8 +1574,12 @@ class MosAppExtension(omni.ext.IExt):
             with ui.VStack(spacing=10):
                 # Header
                 ui.Label(
+                    "Scene Scoring",
+                    style={"color": TEXT_PRIMARY, "font_size": 18},
+                )
+                ui.Label(
                     f"Participant: {self._participant}",
-                    style={"color": 0xFFAABBFF, "font_size": _SCORE_HEADER_SIZE},
+                    style={"color": PARTICIPANT_ACCENT, "font_size": _SCORE_HEADER_SIZE},
                 )
                 ui.Separator()
 
@@ -1575,7 +1595,7 @@ class MosAppExtension(omni.ext.IExt):
                             height=_SCORE_ROW_H,
                             word_wrap=False,
                             alignment=ui.Alignment.LEFT_CENTER,
-                            style={"font_size": _SCORE_FONT_SIZE},
+                            style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
                         )
                         with ui.VStack(width=_SCORE_SLIDER_W, height=_SCORE_ROW_H):
                             ui.Spacer()
@@ -1593,14 +1613,14 @@ class MosAppExtension(omni.ext.IExt):
                             width=_SCORE_VALUE_W,
                             height=_SCORE_ROW_H,
                             alignment=ui.Alignment.CENTER,
-                            style={"font_size": _SCORE_FONT_SIZE},
+                            style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
                         )
                         step_lbl = ui.Label(
                             _SLIDER_STEPS[2],  # "Average" = index 2 = value 3
                             width=_SCORE_STEP_W,
                             height=_SCORE_ROW_H,
                             alignment=ui.Alignment.LEFT_CENTER,
-                            style={"color": 0xFFDDDDDD, "font_size": _SCORE_FONT_SIZE},
+                            style={"color": TEXT_PRIMARY, "font_size": _SCORE_FONT_SIZE},
                         )
                         self._score_step_labels[key] = step_lbl
                         self._score_value_labels[key] = value_lbl
@@ -1634,7 +1654,7 @@ class MosAppExtension(omni.ext.IExt):
                         "Next  ▶",
                         width=_SCORE_BTN_W,
                         height=_SCORE_BTN_H,
-                        style={"font_size": _SCORE_FONT_SIZE},
+                        style={"font_size": _SCORE_FONT_SIZE, **primary_button_style()},
                         clicked_fn=self._on_next,
                     )
                     ui.Spacer()
@@ -1642,11 +1662,11 @@ class MosAppExtension(omni.ext.IExt):
                 self._scene_info_lbl = ui.Label(
                     "",
                     word_wrap=True,
-                    style={"color": 0xFFAAAAAA, "font_size": _SCORE_FONT_SIZE},
+                    style={"color": TEXT_MUTED, "font_size": _SCORE_FONT_SIZE},
                 )
                 self._scoring_hint_lbl = ui.Label(
                     "Press Esc to close without submitting.",
-                    style={"color": 0xFF777777, "font_size": _SCORE_FOOTER_SIZE},
+                    style={"color": TEXT_HINT, "font_size": _SCORE_FOOTER_SIZE},
                 )
 
         self._update_scene_info()
