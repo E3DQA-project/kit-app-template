@@ -127,7 +127,7 @@ _PROMPT_BTN_H      = 44
 
 # Scoring panel.
 _SCORE_WIN_WIDTH   = 760
-_SCORE_WIN_HEIGHT  = 680
+_SCORE_WIN_HEIGHT  = 730
 _SCORE_FONT_SIZE   = 22
 _SCORE_HEADER_SIZE = 22
 _SCORE_FOOTER_SIZE = 16
@@ -1579,7 +1579,7 @@ class MosAppExtension(omni.ext.IExt):
         self._score_value_labels = {}
 
         with self._scoring_win.frame:
-            with ui.VStack(spacing=10):
+            with ui.VStack(spacing=10, style={"padding": 14}):
                 # Header
                 ui.Label(
                     "Scene Scoring",

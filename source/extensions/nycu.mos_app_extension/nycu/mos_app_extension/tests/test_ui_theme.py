@@ -87,6 +87,12 @@ class MosUiThemeTests(unittest.TestCase):
         self.assertIn("offset_x=ui.Pixel(_score_anchor_offset(index))", source)
         self.assertNotIn("ui.FloatSlider(", source)
 
+    def test_scoring_window_has_content_inset_and_footer_clearance(self):
+        source = EXTENSION_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("_SCORE_WIN_HEIGHT  = 730", source)
+        self.assertIn('with ui.VStack(spacing=10, style={"padding": 14}):', source)
+
 
 if __name__ == "__main__":
     unittest.main()
