@@ -1651,7 +1651,7 @@ class MosAppExtension(omni.ext.IExt):
                 with ui.HStack(spacing=12, height=_SCORE_BTN_H + 8):
                     ui.Spacer()
                     ui.Button(
-                        "Next  ▶",
+                        "Next  >",
                         width=_SCORE_BTN_W,
                         height=_SCORE_BTN_H,
                         style={"font_size": _SCORE_FONT_SIZE, **primary_button_style()},

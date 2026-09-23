@@ -69,6 +69,12 @@ class MosUiThemeTests(unittest.TestCase):
         self.assertIn("self._scoring_win.frame.set_style(modal_frame_style())", source)
         self.assertIn("_SLIDER_STYLE = {**slider_style()", source)
 
+    def test_next_button_uses_a_font_safe_right_chevron(self):
+        source = EXTENSION_PATH.read_text(encoding="utf-8")
+
+        self.assertIn('"Next  >"', source)
+        self.assertNotIn('"Next  ▶"', source)
+
 
 if __name__ == "__main__":
     unittest.main()
